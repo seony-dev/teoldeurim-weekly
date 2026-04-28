@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+.claude/
+
+# 로컬 테스트 산출물 (history는 커밋함)
+local_output/
+*.log
+logs/

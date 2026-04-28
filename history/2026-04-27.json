@@ -1,0 +1,60 @@
+{
+  "date_kst": "2026-04-27",
+  "generated_at_utc": "2026-04-27T09:57:11.636402+00:00",
+  "config": {
+    "min_views": 100000,
+    "max_views": 5000000,
+    "max_duration_seconds": 180,
+    "lookback_days_used": 14
+  },
+  "stats": {
+    "lookback_days": 14,
+    "total_collected": 36,
+    "total_after_filter": 9,
+    "hard_filter_excluded": 27,
+    "soft_filter_excluded": 7,
+    "final_count": 2
+  },
+  "candidates": [
+    {
+      "video_id": "XJm3F3DkIX8",
+      "url": "https://www.youtube.com/shorts/XJm3F3DkIX8",
+      "title": "후보정 개나 준 Who is she 레코딩 비하인드",
+      "channel": "니 무슨 띠고?",
+      "published_at": "2026-04-14T11:30:36Z",
+      "view_count": 355216,
+      "duration_seconds": 42,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "녹음/실력 비하인드 (이영지 'Who is she' 레코딩)",
+        "title_pattern": "'후보정 개나 준 [곡명] 레코딩 비하인드'",
+        "low_timeliness_reason": "실력 입증형 녹음 비하인드는 시점에 무관하게 재소비된다.",
+        "channel_fit": "라이브/녹음 실력 해설은 털어드림의 '실력 논란 해설' 포맷과 정합.",
+        "first_3sec_hook": "부스 안 무보정 생목 녹음 영상 + '후보정 X' 자막",
+        "variation_topic": "'후보정 필요 없는 아이돌 보컬 TOP'식으로 녹음 부스 원본 음원만 모아 실력 서열 해설",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "LnUeITOeSD8",
+      "url": "https://www.youtube.com/shorts/LnUeITOeSD8",
+      "title": "2008년 그 노래… 비하인드가 더 레전드.. 대성 ‘날 봐, 귀순’ 탄생 비화 #대성 #날봐귀순 #지드래곤 #GD #빅뱅 #BIGBANG #트로트 #KPOP #쇼츠",
+      "channel": "이야기한스푼",
+      "published_at": "2026-04-19T05:07:40Z",
+      "view_count": 140218,
+      "duration_seconds": 17,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "곡 탄생 비화 (빅뱅 대성 '날 봐, 귀순')",
+        "title_pattern": "'[연도] 그 노래… 비하인드가 더 레전드.. [가수] [곡명] 탄생 비화'",
+        "low_timeliness_reason": "2008년 발매곡의 제작 비화로 시점에 구애받지 않는 아카이브성 소재.",
+        "channel_fit": "1군 아이돌(빅뱅)의 곡 제작 비하인드 해설로 '숨겨진 이유' 포맷에 정합.",
+        "first_3sec_hook": "'날 봐, 귀순' 무대 클립 + '2008년' 자막 임팩트",
+        "variation_topic": "GD가 대성에게 트로트풍 곡을 밀어붙인 이유 — 빅뱅 멤버 캐릭터 분배 전략 관점에서 해설",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    }
+  ]
+}
