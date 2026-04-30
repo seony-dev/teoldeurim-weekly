@@ -4,8 +4,13 @@ name: 털어드림 주간 후보 메일링
 on:
   schedule:
     - cron: '0 0 * * 5'   # 분 시 일 월 요일 (UTC 기준, 5=금요일)
-  # 수동 실행도 가능 (Actions 탭에서 "Run workflow" 버튼)
+  # 수동 실행 (Actions 탭에서 "Run workflow" 버튼)
   workflow_dispatch:
+    inputs:
+      force_rescan:
+        description: '강제 재분석 (오늘자 history 무시하고 새로 수집·분석)'
+        type: boolean
+        default: false
 
 # 동시 실행 방지 (같은 시각 재실행 방지)
 concurrency:
@@ -77,6 +82,8 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # workflow_dispatch에서 force_rescan=true 체크하면 1로 전달, 아니면 빈 값
+          FORCE_RESCAN: ${{ github.event.inputs.force_rescan == 'true' && '1' || '' }}
           PYTHONUNBUFFERED: '1'
         run: python scripts/weekly.py
 
