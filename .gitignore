@@ -18,3 +18,9 @@ venv/
 local_output/
 *.log
 logs/
+
+# PPT/리포트 빌드 산출물
+build_ppt/
+*.pptx
+*.pdf
+node_modules/

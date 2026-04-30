@@ -37,13 +37,31 @@ CONFIG = {
     "MIN_VIEWS": 1_000_000,           # 100만 이상
     "MAX_VIEWS": 5_000_000,           # 500만 미만
     "MAX_DURATION_SEC": 180,
-    "LOOKBACK_DAYS": 365,             # 1년치 풀에서 매주 신선한 배치 추출
-    "MAX_ANALYSIS_CANDIDATES": 30,    # Claude 분석 비용 상한 (조회수 상위 N개만 분석)
-    "TARGET_CANDIDATES": 20,          # 최종 메일에 노출할 개수
+    # 검색 기간: "6개월 전 ~ 1년 전 사이" 영상만. 풀 부족 시 3개월 전까지 자동 확장.
+    "LOOKBACK_DAYS_OLDEST": 365,             # 가장 오래된 한계 (1년 전)
+    "LOOKBACK_DAYS_NEWEST_PRIMARY": 180,     # 가장 최근 한계 (6개월 전) — 기본
+    "LOOKBACK_DAYS_NEWEST_FALLBACK": 90,     # 가장 최근 한계 (3개월 전) — fallback
+    "MIN_HARD_PASS": 25,                     # hard pass 미만이면 fallback 발동
+    "MAX_ANALYSIS_CANDIDATES": 30,           # Claude 분석 비용 상한 (조회수 상위 N개만 분석)
+    "TARGET_CANDIDATES": 20,                 # 최종 메일에 노출할 개수
     "REGION": "KR",
     "LANGUAGE": "ko",
     "CHANNEL_BLOCKLIST": {
         "SOONIGROUP [수니그룹]",
+        # 자사/협력 채널 — 우리가 참고해야 하는 채널이라 후보에서 제외
+        "연예부 김버니",
+        "묘한덕질",
+        "털어드림",
+        "밈박스",
+        "짤덕방",
+    },
+    # 채널 ID 기반 블록리스트 (이름 변경에 영향 안 받음 — 더 안전)
+    "CHANNEL_ID_BLOCKLIST": {
+        "UC7m5t1dfCRmr_YjInZYurXQ",  # 연예부 김버니
+        "UCww8_tNoNouU_qk1JxZnNLQ",  # 묘한덕질
+        "UCfrO3ZMC-rOThB-NSxfGjTQ",  # 털어드림
+        "UCJ-WDvNyJYnt-9lIIX7uKGA",  # 밈박스
+        "UCcerVbAluh-1ifuEH6ZMqsw",  # 짤덕방
     },
     "TITLE_KEYWORD_BLOCKLIST": [
         "직캠", "풀캠", "fancam",
@@ -279,6 +297,7 @@ def parse_item(v):
         "url": f"https://www.youtube.com/shorts/{v['id']}",
         "title": sn.get("title", ""),
         "channel": sn.get("channelTitle", ""),
+        "channel_id": sn.get("channelId", ""),
         "published_at": sn.get("publishedAt", ""),
         "view_count": int(st.get("viewCount", 0) or 0),
         "duration_seconds": iso_dur_to_sec(cd.get("duration", "")),
@@ -294,9 +313,12 @@ def blocked_by_keyword(title):
 # ============================================================================
 # 수집 + 필터링
 # ============================================================================
-def collect(api_key, lookback_days, seen_ids=None):
-    """1년치 풀에서 영상 수집 + 하드 필터 + 중복 제외.
+def collect(api_key, days_oldest, days_newest, seen_ids=None):
+    """특정 기간 풀에서 영상 수집 + 하드 필터 + 중복 제외.
 
+    days_oldest: 가장 오래된 한계 (예: 365 → 1년 전부터)
+    days_newest: 가장 최근 한계 (예: 180 → 6개월 전까지)
+                 → 이 둘 사이의 영상만 검색됨 (예: 6개월~1년 전 사이)
     seen_ids: 과거 history에서 이미 발송된 video_id 집합. 미리 제외해서 다음 단계
     분석 비용(Claude API)을 절감.
     """
@@ -304,10 +326,10 @@ def collect(api_key, lookback_days, seen_ids=None):
         seen_ids = set()
 
     now = datetime.now(timezone.utc)
-    pa = (now - timedelta(days=lookback_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    pb = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    pa = (now - timedelta(days=days_oldest)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    pb = (now - timedelta(days=days_newest)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    print(f"  검색 기간: {pa[:10]} ~ {pb[:10]} ({lookback_days}일)")
+    print(f"  검색 기간: {pa[:10]} ~ {pb[:10]} ({days_oldest}일 전 ~ {days_newest}일 전)")
     all_ids = set()
     for q in CONFIG["SEARCH_QUERIES"]:
         try:
@@ -346,7 +368,7 @@ def collect(api_key, lookback_days, seen_ids=None):
         if not has_korean(row["title"]):
             drop["korean"] += 1
             continue
-        if row["channel"] in CONFIG["CHANNEL_BLOCKLIST"]:
+        if row["channel"] in CONFIG["CHANNEL_BLOCKLIST"] or row["channel_id"] in CONFIG.get("CHANNEL_ID_BLOCKLIST", set()):
             drop["channel"] += 1
             continue
         if blocked_by_keyword(row["title"]):
@@ -446,10 +468,19 @@ ANALYSIS_SYSTEM_PROMPT = """당신은 '털어드림' K-pop Shorts 채널의 소�
 - **SM**: aespa, RIIZE, NCT(127/Dream/WayV), Red Velvet, Hearts2Hearts(하츠투하츠)
 - **YG**: BLACKPINK, BABYMONSTER, TREASURE
 - **JYP**: TWICE, ITZY, NMIXX, Stray Kids, ENHYPEN
-- **기타 대중 인지도 높은 그룹**: IVE, (G)I-DLE, MAMAMOO, IZ*ONE 출신 솔로(이채영·장원영·안유진 등),
-  ATEEZ, TWS, KISS OF LIFE, BOYNEXTDOOR, fromis_9, ZEROBASEONE
+- **기타 대중 인지도 높은 그룹**: IVE, (G)I-DLE, MAMAMOO, ATEEZ, TWS, KISS OF LIFE,
+  BOYNEXTDOOR, fromis_9, ZEROBASEONE
+- **솔로 활동으로 트렌드 1군 진입한 인물**:
+  - IZ*ONE 출신 솔로: 이채영, 장원영, 안유진
+  - **우주소녀 출신 솔로: 다영** (현 솔로 활동 중, 트렌드 폭발)
 
-이 외 무명/소형 기획사·솔로·트로트·해외 K-pop 등은 1군 아닌 것으로 판단.
+이 외 무명/소형 기획사·솔로·트로트·해외 K-pop은 1군 아닌 것으로 판단.
+(우주소녀 그룹 자체는 1군 외 — 다영 솔로 활동만 1군 인정)
+
+**동명이인 주의**: 한국 아이돌 이름은 동명이인이 흔합니다(다영/지수/유나/하니 등).
+메타데이터만으로 인물 식별이 100% 확실하지 않은 경우, 1군 그룹 멤버일 가능성을 우선
+고려해 통과 판정하고 topic_type에 "(추정)"을 표시하세요. 동명이인 가능성 때문에
+실제 1군 인물을 컷하는 것보다, 추정으로 통과시키는 쪽이 안전합니다.
 
 # 분석 임무
 
@@ -813,8 +844,24 @@ body {
   letter-spacing: -0.035em; color: var(--ink); margin-bottom: 24px; word-break: keep-all;
 }
 .hero h1 em { font-style: normal; color: var(--accent); }
-.hero .lead { font-size: 17px; line-height: 1.75; color: var(--ink-dim); max-width: 720px; font-weight: 400; }
+.hero .lead { font-size: 16px; line-height: 1.7; color: var(--ink-dim); max-width: 760px; font-weight: 400; margin-bottom: 14px; }
+.hero .lead:last-of-type { margin-bottom: 0; }
 .hero .lead b { color: var(--ink); font-weight: 700; }
+.hero .lead-row {
+  display: grid; grid-template-columns: 110px 1fr; gap: 16px;
+  max-width: 760px; padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.hero .lead-row:last-of-type { border-bottom: none; }
+.hero .lead-row-k {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--accent); padding-top: 4px;
+}
+.hero .lead-row-v {
+  font-size: 15px; line-height: 1.65; color: var(--ink-2); word-break: keep-all;
+}
+.hero .lead-row-v b { color: var(--ink); font-weight: 700; }
+.hero .lead-rows { margin-top: 18px; margin-bottom: 18px; }
 .hero-meta {
   margin-top: 36px; display: flex; gap: 40px; flex-wrap: wrap;
   padding-top: 28px; border-top: 1px solid var(--border);
@@ -1002,6 +1049,45 @@ body {
   overflow: hidden;
 }
 
+/* Waitlist (다음 주 후보) 섹션 — 파란 톤으로 차별화 */
+.criteria-tag.waitlist {
+  color: #fff; background: #2a5278; border: 1px solid #2a5278;
+}
+.waitlist-row {
+  display: grid; grid-template-columns: 44px 1fr; gap: 16px;
+  padding: 12px 18px; border-bottom: 1px solid var(--border);
+  align-items: start;
+}
+.waitlist-row:last-child { border-bottom: none; }
+.wl-rank {
+  font-size: 13px; font-weight: 800; color: var(--ink-light);
+  font-variant-numeric: tabular-nums; padding-top: 2px;
+}
+.wl-main { min-width: 0; }
+.wl-title {
+  font-size: 13px; font-weight: 700; color: var(--ink-2);
+  line-height: 1.4; margin-bottom: 5px; word-break: keep-all;
+}
+.wl-title a { color: inherit; text-decoration: none; }
+.wl-title a:hover { color: #2a5278; }
+.wl-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 7px; }
+.wl-status {
+  display: flex; gap: 10px; align-items: baseline;
+  background: #f4f7fb; border-left: 3px solid #2a5278;
+  padding: 6px 10px; border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.wl-status-label {
+  font-size: 9px; font-weight: 700; color: #2a5278;
+  letter-spacing: 0.06em; text-transform: uppercase; flex-shrink: 0;
+}
+.wl-status-text { color: var(--ink-2); line-height: 1.5; }
+
+.waitlist-wrap {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden;
+}
+
 @media print {
   body { background: white; }
   .page { max-width: 100%; padding: 24px 28px; }
@@ -1091,11 +1177,43 @@ def _render_excluded_card(i, v):
     </div>"""
 
 
-def render_standalone_report(top, meta, today_label, soft_excluded=None):
-    """첨부 HTML 리포트 — 와이드 레이아웃, hero, stats, 풍부한 카드 + soft 탈락 사유."""
+def _render_waitlist_card(i, v):
+    """다음 주 진입 가능성 있는 보류 후보 카드."""
+    wl_type = v.get("waitlist_type", "")
+    if wl_type == "soft_pass_below_top":
+        status = "AI 통과했지만 조회수 순위 밀려 보류 → 다음 주 dedup 후 진입 가능"
+    elif wl_type == "not_analyzed":
+        status = "분석 미실시 (조회수 순위로 분석 풀 못 들어감) → 다음 주 분석 풀 진입 가능"
+    else:
+        status = "다음 주 진입 가능"
+    return f"""
+    <div class="waitlist-row">
+      <div class="wl-rank">{i:02d}</div>
+      <div class="wl-main">
+        <div class="wl-title">
+          <a href="{v['url']}">{esc_html(v['title'])}</a>
+        </div>
+        <div class="wl-meta">
+          <span class="chip chip-channel">@{esc_html(v['channel'])}</span>
+          <span class="chip chip-views">{fmt_views(v['view_count'])}회</span>
+          <span class="chip chip-date">{v['published_at'][:10]}</span>
+          <span class="chip chip-dur">{v['duration_seconds']}초</span>
+        </div>
+        <div class="wl-status">
+          <span class="wl-status-label">대기 사유</span>
+          <span class="wl-status-text">{esc_html(status)}</span>
+        </div>
+      </div>
+    </div>"""
+
+
+def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlist=None):
+    """첨부 HTML 리포트 — 와이드 레이아웃, hero, stats, 풍부한 카드 + soft 탈락 사유 + 보류 풀."""
     soft_excluded = soft_excluded or []
+    waitlist = waitlist or []
     cards = "".join(_render_candidate_card(i, v) for i, v in enumerate(top, 1))
     excluded_cards = "".join(_render_excluded_card(i, v) for i, v in enumerate(soft_excluded, 1))
+    waitlist_cards = "".join(_render_waitlist_card(i, v) for i, v in enumerate(waitlist, 1))
     fetched = datetime.now(KST).strftime("%Y-%m-%d")
     return f"""<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -1106,11 +1224,30 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None):
     <div class="eyebrow">Channel Sourcing Report · {today_label}</div>
     <h1>털어드림 채널<br><em>K-pop Shorts</em> 후보 분석</h1>
     <p class="lead">
-      YouTube Data API v3 기반 메타데이터 전수 검증. 22개 검색어로 <b>최근 1년치</b> 풀에서 수집,
-      과거 발송 영상은 자동 중복 제외. 조건 전부 통과 —
-      <b>조회수 {CONFIG['MIN_VIEWS']//10000:,}만~{CONFIG['MAX_VIEWS']//10000:,}만</b> ·
-      Shorts({CONFIG['MAX_DURATION_SEC']}초 이하) · 한국어 · Claude 분석 통과 —
-      이번 주 신규 <b>{len(top)}개</b> 확정.
+      YouTube Data API v3 기반 메타데이터 전수 검증. <b>22개 검색어</b>로 수집한 후보를 분석합니다.
+    </p>
+    <div class="lead-rows">
+      <div class="lead-row">
+        <div class="lead-row-k">수집 범위</div>
+        <div class="lead-row-v">
+          <b>{CONFIG['LOOKBACK_DAYS_NEWEST_PRIMARY']//30}~{CONFIG['LOOKBACK_DAYS_OLDEST']//30}개월 전 사이</b>
+          영상 (묵힌 영상 우선)
+        </div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-row-k">중복 제어</div>
+        <div class="lead-row-v">과거 발송 영상 자동 중복 제외 (history 기반)</div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-row-k">필터 통과</div>
+        <div class="lead-row-v">
+          <b>조회수 {CONFIG['MIN_VIEWS']//10000:,}만~{CONFIG['MAX_VIEWS']//10000:,}만</b> ·
+          Shorts({CONFIG['MAX_DURATION_SEC']}초 이하) · 한국어 · Claude 큐레이션
+        </div>
+      </div>
+    </div>
+    <p class="lead">
+      → 이번 주 신규 <b style="color: var(--ink);">{len(top)}개</b> 확정.
     </p>
     <div class="hero-meta">
       <span>Source<b>YouTube Data API</b></span>
@@ -1139,7 +1276,7 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None):
         <li><b>조회수</b> {CONFIG['MIN_VIEWS']//10000:,}만 이상 ~ {CONFIG['MAX_VIEWS']//10000:,}만 미만</li>
         <li><b>길이</b> Shorts 형식 ({CONFIG['MAX_DURATION_SEC']}초 이하)</li>
         <li><b>언어</b> 한국어 제목 (한글 포함)</li>
-        <li><b>업로드 기간</b> 최근 {CONFIG['LOOKBACK_DAYS']}일 ({CONFIG['LOOKBACK_DAYS']//30}개월) 풀</li>
+        <li><b>업로드 기간</b> {CONFIG['LOOKBACK_DAYS_NEWEST_PRIMARY']//30}개월 전 ~ {CONFIG['LOOKBACK_DAYS_OLDEST']//30}개월 전 사이 (묵힌 영상 우선, 부족 시 {CONFIG['LOOKBACK_DAYS_NEWEST_FALLBACK']//30}개월 전까지 자동 확장)</li>
         <li><b>중복 제외</b> 과거 발송 영상 자동 dedup (history 기반)</li>
         <li><b>채널 블록</b> {', '.join(sorted(CONFIG['CHANNEL_BLOCKLIST'])) or '(없음)'}</li>
         <li><b>키워드 블록</b> {', '.join(f'<code>{esc_html(k)}</code>' for k in CONFIG['TITLE_KEYWORD_BLOCKLIST'])}</li>
@@ -1196,6 +1333,25 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None):
   </section>
   ''' if soft_excluded else ''}
 
+  {f'''
+  <section class="section">
+    <div class="section-head">
+      <div class="left">
+        <span class="section-num">03 / WAITLIST</span>
+        <h2>다음 주 후보 풀 ({len(waitlist)}개)</h2>
+      </div>
+      <span class="section-tag">보류 상태 · 다음 주 진입 가능</span>
+    </div>
+    <p class="section-lead">
+      이번 주 발송에는 못 들었지만 풀에 남아있는 후보들. 다음 주에 상위권 영상이
+      dedup으로 빠지거나 분석 풀에 진입하면 자연스럽게 final로 올라올 가능성이 있습니다.
+    </p>
+    <div class="waitlist-wrap">
+      {waitlist_cards}
+    </div>
+  </section>
+  ''' if waitlist else ''}
+
   <div class="footer">
     <span>털어드림 · 자동 발송</span>
     <span>YouTube Data API v3 · Claude Opus 4.7 · {today_label} KST</span>
@@ -1203,13 +1359,14 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None):
 </div></body></html>"""
 
 
-def render_email_html(top, meta, today_label, soft_excluded=None):
+def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None):
     """이메일 본문 — Gmail/Outlook 호환 (table 레이아웃 + inline 스타일).
 
     Gmail은 CSS Grid/Flex/변수를 무시하므로 모든 스타일을 inline으로,
     레이아웃은 <table>로 짜야 깨지지 않음. 화려한 디자인은 첨부 HTML에 있음.
     """
     soft_excluded = soft_excluded or []
+    waitlist = waitlist or []
     # ---- 후보 row들 (table 기반) ----
     rows = []
     for i, v in enumerate(top, 1):
@@ -1298,7 +1455,7 @@ def render_email_html(top, meta, today_label, soft_excluded=None):
               조회수 <b>{CONFIG['MIN_VIEWS']//10000:,}만~{CONFIG['MAX_VIEWS']//10000:,}만</b> ·
               Shorts(<b>{CONFIG['MAX_DURATION_SEC']}초</b>) ·
               한국어 ·
-              최근 <b>{CONFIG['LOOKBACK_DAYS']//30}개월</b> ·
+              <b>{CONFIG['LOOKBACK_DAYS_NEWEST_PRIMARY']//30}~{CONFIG['LOOKBACK_DAYS_OLDEST']//30}개월 전</b> 사이 영상 (묵힌 영상 우선) ·
               과거 발송 자동 중복 제외 ·
               직캠/풀캠/열애설/뮤비 메이킹 등 키워드 차단
             </div>
@@ -1334,6 +1491,8 @@ def render_email_html(top, meta, today_label, soft_excluded=None):
 
     {_render_email_excluded_section(soft_excluded)}
 
+    {_render_email_waitlist_section(waitlist)}
+
     <!-- 푸터 -->
     <tr><td style="padding:16px 28px 24px;border-top:1px solid #e8e6e0;background:#f6f5f3;">
       <div style="font-size:11px;color:#888;line-height:1.6;">
@@ -1351,6 +1510,51 @@ def render_email_html(top, meta, today_label, soft_excluded=None):
 # ============================================================================
 # 메일 발송 (Gmail SMTP)
 # ============================================================================
+def _render_email_waitlist_section(waitlist):
+    """이메일 본문용 보류 후보 섹션 — table 기반, inline 스타일."""
+    if not waitlist:
+        return ""
+    rows = []
+    for i, v in enumerate(waitlist, 1):
+        wl_type = v.get("waitlist_type", "")
+        if wl_type == "soft_pass_below_top":
+            status = "AI 통과했지만 조회수 순위 밀려 보류 → 다음 주 dedup 후 진입 가능"
+        elif wl_type == "not_analyzed":
+            status = "분석 미실시 (조회수로 밀림) → 다음 주 분석 풀 진입 가능"
+        else:
+            status = "다음 주 진입 가능"
+        rows.append(f"""
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #eee;vertical-align:top;width:36px;color:#9a9a9a;font-size:13px;font-weight:800;font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;">{i:02d}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #eee;vertical-align:top;font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;">
+            <div style="font-size:13px;font-weight:700;color:#2a2a2a;line-height:1.4;margin-bottom:4px;">
+              <a href="{v['url']}" style="color:#2a2a2a;text-decoration:none;">{esc_html(v['title'])}</a>
+            </div>
+            <div style="font-size:11px;color:#888;margin-bottom:6px;">
+              <span style="color:#8b1e3f;font-weight:600;">@{esc_html(v['channel'])}</span>
+              &nbsp;·&nbsp; {fmt_views(v['view_count'])}회 &nbsp;·&nbsp; {v['published_at'][:10]}
+            </div>
+            <div style="font-size:11px;color:#444;line-height:1.5;background:#f4f7fb;border-left:3px solid #2a5278;padding:6px 10px;">
+              <b style="color:#2a5278;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;">대기 사유 &nbsp;</b>
+              {esc_html(status)}
+            </div>
+          </td>
+        </tr>""")
+    return f"""
+    <tr><td style="padding:8px 28px 16px;">
+      <div style="font-size:12px;font-weight:700;color:#2a5278;letter-spacing:0.05em;margin-bottom:6px;">03 / WAITLIST</div>
+      <h2 style="margin:0 0 12px;font-size:18px;font-weight:900;color:#2a2a2a;border-bottom:1px solid #ddd;padding-bottom:6px;">
+        다음 주 후보 풀 {len(waitlist)}개
+      </h2>
+      <p style="margin:0 0 12px;font-size:11px;color:#888;line-height:1.6;">
+        이번 주 발송엔 못 들었지만 풀에 남아있는 후보. 다음 주에 dedup 또는 분석 풀 진입으로 final 가능성 있음.
+      </p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+        {''.join(rows)}
+      </table>
+    </td></tr>"""
+
+
 def _render_email_excluded_section(soft_excluded):
     """이메일 본문용 soft 탈락 섹션 — table 기반, inline 스타일."""
     if not soft_excluded:
@@ -1476,8 +1680,9 @@ def main():
             top = archive["candidates"]
             meta = archive["stats"]
             soft_excluded_list = archive.get("soft_excluded", [])
+            waitlist = archive.get("waitlist", [])
             lookback_used = archive["config"]["lookback_days_used"]
-            print(f"  로드: {len(top)}개 후보, soft 탈락 {len(soft_excluded_list)}개, {lookback_used}일 기준")
+            print(f"  로드: {len(top)}개 후보, soft 탈락 {len(soft_excluded_list)}개, 보류 {len(waitlist)}개, {lookback_used} 기준")
         else:
             if force_rescan and arc_path.exists():
                 print(f"\n[FORCE_RESCAN] 기존 history 무시하고 새로 분석합니다")
@@ -1486,11 +1691,22 @@ def main():
             seen_ids = load_seen_video_ids(skip_filename=arc_path.name)
             print(f"\n[STEP 0] 과거 발송 영상: {len(seen_ids)}개 (중복 제외 풀)")
 
-            # 1. 1년치 풀에서 수집 + 하드 필터 + 중복 제외
-            print(f"\n[STEP 1] {CONFIG['LOOKBACK_DAYS']}일 내 영상 수집")
-            result = collect(env["YOUTUBE_API_KEY"], CONFIG["LOOKBACK_DAYS"], seen_ids=seen_ids)
+            # 1. 주 검색 — 6개월 전 ~ 1년 전 사이 (묵힌 영상 우선)
+            oldest = CONFIG["LOOKBACK_DAYS_OLDEST"]
+            newest = CONFIG["LOOKBACK_DAYS_NEWEST_PRIMARY"]
+            print(f"\n[STEP 1] {newest}일 전 ~ {oldest}일 전 사이 영상 수집")
+            result = collect(env["YOUTUBE_API_KEY"], oldest, newest, seen_ids=seen_ids)
             candidates = result["candidates"]
-            lookback_used = CONFIG["LOOKBACK_DAYS"]
+            lookback_used = f"{newest}~{oldest}일 전"
+
+            # 1.5. Hard pass 부족 시 fallback — 3개월 전 ~ 1년 전으로 확장
+            if len(candidates) < CONFIG["MIN_HARD_PASS"]:
+                fallback_newest = CONFIG["LOOKBACK_DAYS_NEWEST_FALLBACK"]
+                print(f"\n[STEP 1b] hard pass 부족 ({len(candidates)} < {CONFIG['MIN_HARD_PASS']})"
+                      f" → {fallback_newest}일 전까지 확장 재검색")
+                result = collect(env["YOUTUBE_API_KEY"], oldest, fallback_newest, seen_ids=seen_ids)
+                candidates = result["candidates"]
+                lookback_used = f"{fallback_newest}~{oldest}일 전 (fallback)"
 
             # 2. Claude 분석 비용 상한 — 조회수 상위 N개만 분석
             to_analyze = candidates[:CONFIG["MAX_ANALYSIS_CANDIDATES"]]
@@ -1507,6 +1723,16 @@ def main():
             soft_passed.sort(key=lambda x: -x["view_count"])
             soft_excluded_list.sort(key=lambda x: -x["view_count"])
             top = soft_passed[:CONFIG["TARGET_CANDIDATES"]]
+
+            # 4.5. Waitlist — 다음 주 진입 가능성 있는 보류 후보 풀
+            waitlist_soft = soft_passed[CONFIG["TARGET_CANDIDATES"]:]   # soft pass했지만 조회수 밀림
+            waitlist_unanalyzed = candidates[CONFIG["MAX_ANALYSIS_CANDIDATES"]:]  # 분석 미실시
+            for c in waitlist_soft:
+                c["waitlist_type"] = "soft_pass_below_top"
+            for c in waitlist_unanalyzed:
+                c["waitlist_type"] = "not_analyzed"
+            waitlist = waitlist_soft + waitlist_unanalyzed
+            waitlist.sort(key=lambda x: -x["view_count"])
 
             meta = {
                 "lookback_days": lookback_used,
@@ -1539,6 +1765,7 @@ def main():
                 "candidates": top,
             }
             archive["soft_excluded"] = soft_excluded_list
+            archive["waitlist"] = waitlist
             arc_path.write_text(json.dumps(archive, ensure_ascii=False, indent=2), encoding="utf-8")
             print(f"  ✅ {arc_path.relative_to(ROOT)}")
 
@@ -1548,14 +1775,14 @@ def main():
         send_email(
             env,
             subject=f"[털어드림 주간 후보] {today_label} · 신규 {len(top)}개",
-            html_body=render_email_html(top, meta, today_label, soft_excluded_list),
-            attachment_html=render_standalone_report(top, meta, today_label, soft_excluded_list),
+            html_body=render_email_html(top, meta, today_label, soft_excluded_list, waitlist),
+            attachment_html=render_standalone_report(top, meta, today_label, soft_excluded_list, waitlist),
             attachment_filename=attachment_filename,
         )
         print(f"  ✅ 메일 발송 완료: {len(top)}개")
 
         print("\n" + "=" * 60)
-        print(f"완료: 최종 {len(top)}개 발송 ({lookback_used}일 기준)")
+        print(f"완료: 최종 {len(top)}개 발송 ({lookback_used} 기준)")
         print("=" * 60)
 
     except Exception as e:
