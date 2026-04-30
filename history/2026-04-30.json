@@ -1,0 +1,612 @@
+{
+  "date_kst": "2026-04-30",
+  "generated_at_utc": "2026-04-30T03:56:35.472344+00:00",
+  "config": {
+    "min_views": 1000000,
+    "max_views": 5000000,
+    "max_duration_seconds": 180,
+    "lookback_days_used": "90~365일 전 (fallback)"
+  },
+  "stats": {
+    "lookback_days": "90~365일 전 (fallback)",
+    "total_collected": 293,
+    "dedup_excluded": 17,
+    "total_after_filter": 28,
+    "hard_filter_excluded": 248,
+    "soft_filter_excluded": 13,
+    "final_count": 15
+  },
+  "candidates": [
+    {
+      "video_id": "ipQ2V7SPpxE",
+      "url": "https://www.youtube.com/shorts/ipQ2V7SPpxE",
+      "title": "이채영 보고 연습했다는 백지헌의 짧은치마",
+      "channel": "나 잘한다해짜나",
+      "channel_id": "UC84G3UgA0hr84VJ_T_f1vrA",
+      "published_at": "2025-12-20T15:06:46Z",
+      "view_count": 4412174,
+      "duration_seconds": 29,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "세대 간 관계성/영향 (이채영 → 백지헌)",
+        "title_pattern": "'[선배] 보고 연습했다는 [후배]의 [특징]'",
+        "low_timeliness_reason": "선배 아이돌을 따라한 후배 구조는 매 세대마다 반복되는 장기 콘텐츠",
+        "channel_fit": "명세 '관계성 shorts' 정합. 1군 인물 2명 직접 비교, 2차 해석으로 확장 용이",
+        "first_3sec_hook": "비교형. 이채영 무대 / 백지헌 무대 나란히 편집 + '이거 보고 따라했다는' 자막",
+        "variation_topic": "백지헌이 이채영의 워킹·치마 핸들링을 레퍼런스로 삼은 디테일을 프레임 단위 비교, 아이즈원-르세라핌 암묵적 계보 해설",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "ymJJcXFLfJk",
+      "url": "https://www.youtube.com/shorts/ymJJcXFLfJk",
+      "title": "진짜 이상할 정도로 안뜨는 이유?",
+      "channel": "해달특파원",
+      "channel_id": "UC5EvMz_XliMULpqQHkjnzgQ",
+      "published_at": "2025-12-26T10:30:42Z",
+      "view_count": 3379459,
+      "duration_seconds": 47,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "K-pop 산업 분석 (특정 그룹 비인기 구조 분석)",
+        "title_pattern": "'진짜 이상할 정도로 [부정 현상]하는 이유?'",
+        "low_timeliness_reason": "특정 그룹이 실력·비주얼에도 안 뜨는 구조적 이유는 산업 분석형 영구 소재",
+        "channel_fit": "명세 'K-pop 산업 분석' 정합. 비인기 원인을 소속사·마케팅·팬덤 구조로 해부 가능",
+        "first_3sec_hook": "의외성형. '실력 다 갖췄는데 왜 안 뜰까?' 자막 + 해당 그룹 무대 장면 컷",
+        "variation_topic": "실력·비주얼 갖춘 그룹이 대중 인지도 못 얻는 구조 — 소속사 자본·타이틀곡 전략·데뷔 타이밍 교차 분석",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "1PYblw2cpRw",
+      "url": "https://www.youtube.com/shorts/1PYblw2cpRw",
+      "title": "첫소절에 라이브 실력 바로 들통난 무대ㄷㄷ 립싱크 의심하던 사람들 다 조용해짐",
+      "channel": "국뽕이",
+      "channel_id": "UCjqY15vp4vdln2T8RVCNJnA",
+      "published_at": "2025-12-25T10:30:02Z",
+      "view_count": 2527321,
+      "duration_seconds": 37,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "실력/논란 해설 (라이브 실력 검증)",
+        "title_pattern": "'첫소절에 라이브 실력 바로 들통난 무대 / 립싱크 의심하던 사람들 다 조용해짐'",
+        "low_timeliness_reason": "라이브 실력 검증·립싱크 의심 반전 구조는 무대 영상이 남아있는 한 반복 소비되는 장기 콘텐츠",
+        "channel_fit": "명세 '실력 논란 해설' 정합. 립싱크 의심 → 실제 라이브로 반전되는 구조를 2차 해석으로 확장 가능",
+        "first_3sec_hook": "의외성형. 첫소절 직후 관객·MR 사라진 라이브 클립 + '립싱크인 줄 알았는데' 자막",
+        "variation_topic": "립싱크 의심을 한 방에 뒤집는 첫소절 라이브 구조 — 발성·호흡 안정성 분석으로 실력 검증 각도 재구성",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "HGIcPPexO9k",
+      "url": "https://www.youtube.com/shorts/HGIcPPexO9k",
+      "title": "아이돌 연습생 기간의 ‘깨지지 않는 기록’",
+      "channel": "패션뻐꾹이",
+      "channel_id": "UC_tUEs8BU5ucJlbQ6J0XBow",
+      "published_at": "2025-12-29T14:00:35Z",
+      "view_count": 2308938,
+      "duration_seconds": 56,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "연습생/데뷔 비하인드 (최장 연습생 기록)",
+        "title_pattern": "'아이돌 연습생 기간의 [극한 수식어] 기록'",
+        "low_timeliness_reason": "연습생 기간 최장 기록은 시간이 지나도 회자되는 영구 소재로, 데뷔 후에도 반복 소비됨",
+        "channel_fit": "명세 '연습생/데뷔 비하인드' 정합. 극단 수치 기반으로 트레이닝 시스템·기획사 구조 분석으로 확장 가능",
+        "first_3sec_hook": "극한상황형. '연습생 ○년' 큰 숫자 자막 + 깨지지 않는 기록 강조 텍스트",
+        "variation_topic": "최장 연습생 기록 보유자들의 공통점 — 회사 포지션 공백·데뷔조 재편·계약 연장 구조를 산업 관점에서 해설",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "B2upBy4swZQ",
+      "url": "https://www.youtube.com/shorts/B2upBy4swZQ",
+      "title": "백지헌이 의자 담당 자처했다가 후회한 이유 ㅋㅋ",
+      "channel": "프롬 쇼츠 맛집",
+      "channel_id": "UCZsRg5SbF9HM2gb2iitMTfA",
+      "published_at": "2025-12-23T11:13:00Z",
+      "view_count": 2200704,
+      "duration_seconds": 34,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "아이돌 일상 상황극 (백지헌)",
+        "title_pattern": "'[아이돌]이 [역할] 자처했다가 후회한 이유'",
+        "low_timeliness_reason": "멤버 간 역할극·캐릭터 비하인드는 시간 지나도 재소비되는 일상형 콘텐츠",
+        "channel_fit": "명세 '일상 상황극 shorts' 정합. 1군 르세라핌 멤버 백지헌의 그룹 내 캐릭터를 유머 각도로 분석",
+        "first_3sec_hook": "유머형. 백지헌이 의자 자세 잡는 장면 + '이걸 왜 한다고 했지' 자막",
+        "variation_topic": "백지헌이 예능·팬미팅에서 자처한 '의자 담당' 밈이 멤버 케미·서열 구조를 어떻게 드러내는지 해설",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "jG8VuDYCxTs",
+      "url": "https://www.youtube.com/shorts/jG8VuDYCxTs",
+      "title": "뉴진스, 다니엘만 '나가게 된 이유'",
+      "channel": "김팩트",
+      "channel_id": "UCqA58HJhzETaaR6WyJhp9aQ",
+      "published_at": "2025-12-29T06:51:43Z",
+      "view_count": 2149225,
+      "duration_seconds": 43,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "K-pop 산업 분석 (뉴진스 다니엘)",
+        "title_pattern": "'[그룹], [멤버]만 나가게 된 이유'",
+        "low_timeliness_reason": "뉴진스/어도어 분쟁은 단발 이슈가 아닌 계약·소속사 구조 분석 소재로 장기 유효",
+        "channel_fit": "명세 '산업 분석 shorts' 정합. 멤버별 이탈 결정 차이를 계약·가족·법적 구조 각도로 해설 가능",
+        "first_3sec_hook": "의외성형. 다니엘 단독 사진 + '왜 다니엘만?' 자막으로 호기심 유발",
+        "variation_topic": "뉴진스 5인 중 다니엘만 다른 행보를 택한 배경 — 어도어 계약 구조와 가족·법률 대응 차이 분석",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "5ebeWMcBiDU",
+      "url": "https://www.youtube.com/shorts/5ebeWMcBiDU",
+      "title": "고인물만 아는 데뷔조 #shorts",
+      "channel": "뭉케뭉케",
+      "channel_id": "UCun14pE-GmXEd1qB9FLuQHA",
+      "published_at": "2025-12-16T09:00:07Z",
+      "view_count": 1923977,
+      "duration_seconds": 41,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "연습생/데뷔 비하인드 (데뷔조 비화)",
+        "title_pattern": "'고인물만 아는 [주제]'",
+        "low_timeliness_reason": "과거 데뷔조·연습생 비화는 시간이 지나도 회상형으로 반복 소비되는 장기 콘텐츠",
+        "channel_fit": "명세 '연습생/데뷔 비하인드' 정합. 무산된 데뷔조 구조를 회사 시스템 관점에서 2차 해석 가능",
+        "first_3sec_hook": "의외성형. 흐릿한 옛 연습생 사진 + '이 조합 기억나?' 자막으로 호기심 유발",
+        "variation_topic": "무산된 데뷔조가 현재 1군 그룹으로 재편된 경로 — 기획사의 데뷔조 재구성 로직 해설",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "GaKqbMfrMfs",
+      "url": "https://www.youtube.com/shorts/GaKqbMfrMfs",
+      "title": "갑자기 어색해진 하이브 여돌 '관계성'",
+      "channel": "덕칼럼",
+      "channel_id": "UC0l_Io9P2rTbM82PoC9Bi4w",
+      "published_at": "2025-11-15T11:02:01Z",
+      "view_count": 1767763,
+      "duration_seconds": 48,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "세대 간 관계성/멤버 간 관계 (하이브 여돌)",
+        "title_pattern": "'갑자기 어색해진 [기획사] [성별]돌 관계성'",
+        "low_timeliness_reason": "기획사 내 그룹 간 관계 변화는 활동기마다 재소환되는 구조적 소재로 장기 유효",
+        "channel_fit": "명세 '관계성 shorts' 정합. 하이브 산하 여돌 간 관계 변화를 산업 구조(르세라핌·뉴진스·아일릿 갈등) 각도로 해설 가능",
+        "first_3sec_hook": "의외성형. 과거 친했던 장면 → 최근 어색한 장면 컷 전환 + '갑자기 왜?' 자막",
+        "variation_topic": "하이브 산하 여돌 간 관계가 어색해진 배경을 뉴진스 사태·레이블 간 갈등 구조로 2차 해석",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "SYbgaHKBZdE",
+      "url": "https://www.youtube.com/shorts/SYbgaHKBZdE",
+      "title": "방송 중 행동을 조심해야 하는 이유 #kpop #아이돌 #shorts",
+      "channel": "케이팝으로 보는 세상",
+      "channel_id": "UCsTacSJLSgxthmSwnW_Inwg",
+      "published_at": "2026-01-05T06:00:32Z",
+      "view_count": 1389782,
+      "duration_seconds": 52,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "아이돌 일상 상황극 (방송 중 행동 주의)",
+        "title_pattern": "'[상황]에서 행동을 조심해야 하는 이유'",
+        "low_timeliness_reason": "방송 중 카메라·팬캠에 포착되는 행동 리스크는 세대 불문 반복되는 구조적 소재",
+        "channel_fit": "명세 '일상 상황극 shorts' 정합. 방송가 카메라 동선·팬캠 구조를 분석 각도로 풀 수 있음",
+        "first_3sec_hook": "의외성형. 방송 중 무심코 한 행동이 카메라에 잡힌 장면 + '이래서 조심해야 함' 자막",
+        "variation_topic": "아이돌이 방송 중 사소한 행동도 조심해야 하는 이유 — 멀티캠·팬캠·실시간 클리핑 구조가 만든 24시간 감시 환경 분석",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "5mNoNEJWg10",
+      "url": "https://www.youtube.com/shorts/5mNoNEJWg10",
+      "title": "[엔믹스] 골든커버 비하인드",
+      "channel": "오씨가문최대아웃풋",
+      "channel_id": "UCY3Hr6ys1EVsPPGtB8lJMvQ",
+      "published_at": "2025-07-17T07:03:17Z",
+      "view_count": 1326539,
+      "duration_seconds": 16,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "뮤직비디오/커버 비하인드 (NMIXX)",
+        "title_pattern": "'[그룹] [곡] 커버 비하인드'",
+        "low_timeliness_reason": "커버 비하인드는 곡이 회자될 때마다 재소환되는 장기 소재",
+        "channel_fit": "명세 '비하인드 shorts' 정합. 1군 그룹 NMIXX의 골든 커버 제작 과정 해설 각도 가능",
+        "first_3sec_hook": "설명형. 골든 원곡 장면 + NMIXX 커버 장면 교차 + '이렇게 찍었다' 자막",
+        "variation_topic": "NMIXX가 '골든'을 커버하게 된 배경과 보컬 배치·편곡 변형을 JYP 시스템 관점에서 해설",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "wgV3d6ttreY",
+      "url": "https://www.youtube.com/shorts/wgV3d6ttreY",
+      "title": "‘생각치못한 이유였던’ 수정된 안무 비하인드",
+      "channel": "패션뻐꾹이",
+      "channel_id": "UC_tUEs8BU5ucJlbQ6J0XBow",
+      "published_at": "2025-12-01T14:01:43Z",
+      "view_count": 1294608,
+      "duration_seconds": 53,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "아이돌 뒷이야기 (안무 수정 비하인드)",
+        "title_pattern": "'[의외의 이유]였던' [수정 대상] 비하인드",
+        "low_timeliness_reason": "안무 수정 사유는 활동 종료 후에도 계속 회자되는 비하인드 구조 콘텐츠",
+        "channel_fit": "명세 '뮤비/안무 비하인드 shorts' 정합. 표면적 안무 변경 뒤의 숨은 사유를 2차 해석으로 풀기 적합",
+        "first_3sec_hook": "의외성형. 원본 안무 vs 수정 안무 비교 컷 + '이게 바뀐 진짜 이유' 자막",
+        "variation_topic": "안무 수정이 단순 미관이 아닌 카메라 동선·의상·체력 한계 등 제작 현실에서 비롯되는 구조적 분석",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "KrtT9f2UKu8",
+      "url": "https://www.youtube.com/shorts/KrtT9f2UKu8",
+      "title": "아이돌의 성량이 맞나 싶은 송하영의 야생화",
+      "channel": "나 잘한다해짜나",
+      "channel_id": "UC84G3UgA0hr84VJ_T_f1vrA",
+      "published_at": "2025-05-26T12:32:45Z",
+      "view_count": 1264636,
+      "duration_seconds": 21,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "실력/논란 해설 (송하영 - 전 fromis_9)",
+        "title_pattern": "'아이돌의 [요소]이 맞나 싶은 [인물]의 [곡]'",
+        "low_timeliness_reason": "라이브 실력 재조명은 활동기마다 반복 소환되는 장기 소재",
+        "channel_fit": "명세 '실력 해설 shorts' 정합. fromis_9 출신 1군 멤버의 보컬 역량을 곡 해석 각도로 분석 가능",
+        "first_3sec_hook": "의외성형. 송하영 '야생화' 고음 라이브 장면 + '이게 아이돌 성량?' 자막",
+        "variation_topic": "송하영의 성량이 그룹 내 보컬 포지션과 솔로 가능성에 어떻게 영향을 미쳤는지 구조 분석",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "9iOlRG8nWQg",
+      "url": "https://www.youtube.com/shorts/9iOlRG8nWQg",
+      "title": "SM연습생들의 원망을 샀던 김주은",
+      "channel": "케이팝 저장소",
+      "channel_id": "UC03gB3_J4q7RuDDg-SFu95A",
+      "published_at": "2025-08-12T06:08:29Z",
+      "view_count": 1186369,
+      "duration_seconds": 61,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "연습생/데뷔 비하인드 (김주은 / 전 SM)",
+        "title_pattern": "'[회사]연습생들의 원망을 샀던 [인물]'",
+        "low_timeliness_reason": "연습생 시절 회사 내 평가·관계 구조는 데뷔 후에도 회상형으로 반복 소비되는 영구 소재",
+        "channel_fit": "명세 '연습생 시절 shorts' 정합. SM 트레이닝 시스템과 연습생 간 경쟁 구조를 분석 각도로 풀어낼 수 있음",
+        "first_3sec_hook": "의외성형. SM 로고 + 김주은 연습생 시절 사진 + '얘 때문에 다 힘들었다는' 자막",
+        "variation_topic": "김주은이 SM 연습생 시절 동료들의 원망을 산 구조적 이유 — SM 평가·경쟁 시스템과 톱티어 연습생의 위치 분석",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "Pyqd40WusZU",
+      "url": "https://www.youtube.com/shorts/Pyqd40WusZU",
+      "title": "연습생 기간이 짧은 이유 #shorts",
+      "channel": "뭉케뭉케",
+      "channel_id": "UCun14pE-GmXEd1qB9FLuQHA",
+      "published_at": "2025-06-18T11:00:46Z",
+      "view_count": 1073350,
+      "duration_seconds": 48,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "연습생/데뷔 비하인드 (소속사 트레이닝 시스템)",
+        "title_pattern": "'[현상] 이유'",
+        "low_timeliness_reason": "연습생 기간 길이를 결정하는 회사 시스템 구조는 시기 무관하게 반복 소비되는 장기 소재",
+        "channel_fit": "명세 '산업 분석/연습생 비하인드' 정합. 회사가 연습생 기간을 단축하는 경제·전략적 이유를 2차 해석으로 풀기 좋음",
+        "first_3sec_hook": "설명형. 연습생 사진 + '요즘 연습생 기간이 짧아진 이유' 자막으로 산업 구조 분석 도입",
+        "variation_topic": "연습생 기간 단축 트렌드 — 데뷔 회수 주기·시장 경쟁·트레이닝 비용 구조의 산업적 분석",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "H-mI089dA_Y",
+      "url": "https://www.youtube.com/shorts/H-mI089dA_Y",
+      "title": "신인vs고연차 아이돌 녹음실 차이",
+      "channel": "여기잉네",
+      "channel_id": "UCTDVQu9YMBZ_jQCOiTo3GqA",
+      "published_at": "2025-06-28T00:00:16Z",
+      "view_count": 1033235,
+      "duration_seconds": 48,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "아이돌 뒷이야기 (녹음실 비하인드 - 신인 vs 고연차)",
+        "title_pattern": "'[그룹A]vs[그룹B] [현장] 차이'",
+        "low_timeliness_reason": "녹음실 연차별 차이는 데뷔 시즌마다 반복 소환되는 장기 비하인드 소재",
+        "channel_fit": "명세 '아이돌 뒷이야기' 정합. 신인-고연차 비교 구조로 K-pop 트레이닝 시스템 분석 각도 확장 가능",
+        "first_3sec_hook": "비교형. 신인 녹음실 장면 / 고연차 녹음실 장면 좌우 분할 + '이렇게 다르다' 자막",
+        "variation_topic": "연차별 녹음실 디렉팅·요청·태도 차이를 통해 본 K-pop 보컬 디렉터-아티스트 권력관계 변화 구조",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    }
+  ],
+  "soft_excluded": [
+    {
+      "video_id": "kxsBVAxXQcE",
+      "url": "https://www.youtube.com/shorts/kxsBVAxXQcE",
+      "title": "야구 선수 팬이 진짜 무서운 이유ㅋㅋㅋ #shorts #아는형님",
+      "channel": "1분예능모음zip",
+      "channel_id": "UC8pqfCpRwtOeVG3lfvlkb9w",
+      "published_at": "2025-07-07T04:00:53Z",
+      "view_count": 4184911,
+      "duration_seconds": 38,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "해당없음 (일반 예능 짤)",
+        "title_pattern": "'[대상] 팬이 진짜 무서운 이유'",
+        "low_timeliness_reason": "예능 클립 자체는 시의성 낮으나 K-pop 분석 소재 아님",
+        "channel_fit": "털어드림 채널 톤(K-pop 분석/해설)과 무관",
+        "first_3sec_hook": "유머형. 아는형님 예능 장면 + 자막 강조",
+        "variation_topic": "해당 없음 — 채널 소재 범위 밖",
+        "should_include": false,
+        "exclusion_reason": "K-pop 아이돌 소재가 아닌 일반 예능 짤. 8가지 소재 유형 어디에도 속하지 않음"
+      }
+    },
+    {
+      "video_id": "GrEHH9EcUmc",
+      "url": "https://www.youtube.com/shorts/GrEHH9EcUmc",
+      "title": "결국 삭제됐다는 부분?",
+      "channel": "도루집",
+      "channel_id": "UCFPLA75HJt9Rhhy0dVT_CsA",
+      "published_at": "2025-12-19T09:24:01Z",
+      "view_count": 4076463,
+      "duration_seconds": 42,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "실력/논란 해설 (대상 불명확)",
+        "title_pattern": "'결국 삭제됐다는 [부분]?'",
+        "low_timeliness_reason": "삭제 이슈는 단기 휘발성 가십에 가까움",
+        "channel_fit": "분석 각도 부재, 낚시성 훅",
+        "first_3sec_hook": "의외성형. 삭제 화면 + 물음표 자막",
+        "variation_topic": "특정 콘텐츠 삭제 배경을 소속사 리스크 관리 관점에서 해설",
+        "should_include": false,
+        "exclusion_reason": "대상 아이돌 특정 불가, 자극·낚시성 훅만 있고 분석 각도 없음"
+      }
+    },
+    {
+      "video_id": "YJ4yVwpwDYA",
+      "url": "https://www.youtube.com/shorts/YJ4yVwpwDYA",
+      "title": "꿈의 악마 커비 하트 만들기! 케이팝 데몬 헌터스 버전💕 (fancy refill) #Shorts #memes",
+      "channel": "썰레임 Ssuleim",
+      "channel_id": "UCZ0dIs-Ao2v8eZF4WOYH5uw",
+      "published_at": "2025-08-25T13:46:32Z",
+      "view_count": 4023422,
+      "duration_seconds": 31,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "해당 없음",
+        "title_pattern": "[캐릭터] 만들기 [버전] 영상",
+        "low_timeliness_reason": "",
+        "channel_fit": "채널 톤(분석/해설형)과 무관한 DIY/만들기 콘텐츠",
+        "first_3sec_hook": "유머형. 슬라임/리필 만들기 장면",
+        "variation_topic": "",
+        "should_include": false,
+        "exclusion_reason": "K-pop 아이돌 분석 소재 아님. DIY 슬라임 만들기 콘텐츠로 8가지 소재 유형 어디에도 속하지 않음"
+      }
+    },
+    {
+      "video_id": "sNdubHdSAig",
+      "url": "https://www.youtube.com/shorts/sNdubHdSAig",
+      "title": "여자아이돌에게 공을 던진 남자아이돌 #kpop #shorts",
+      "channel": "아쮸",
+      "channel_id": "UCV3lN32Z96I3tE4CaSf_BqA",
+      "published_at": "2025-08-27T20:44:30Z",
+      "view_count": 3071925,
+      "duration_seconds": 26,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "아이돌 일상 상황극 (남돌→여돌 인터랙션)",
+        "title_pattern": "'[A아이돌]에게 [행동]한 [B아이돌]'",
+        "low_timeliness_reason": "특정 시점 이슈가 아닌 아이돌 간 인터랙션 모먼트는 시간 지나도 반복 소비되는 소재",
+        "channel_fit": "아이돌 간 관계성·돌발 상황 분석 각도. 누가 누구에게 어떤 맥락에서 던졌는지 2차 해석 가능",
+        "first_3sec_hook": "의외성형. 공 날아가는 슬로모션 + '설마 저기로?' 자막 + 여돌 리액션 컷",
+        "variation_topic": "시상식·체육대회에서 남돌-여돌 간 돌발 인터랙션이 팬덤 사이 '관계성 떡밥'으로 소비되는 구조 분석",
+        "should_include": false,
+        "exclusion_reason": "제목에 1군 아이돌 특정 불가, 분석 각도보다 자극·낚시성 훅 위주의 단순 짤 클립으로 추정"
+      }
+    },
+    {
+      "video_id": "Gue_JdINE7w",
+      "url": "https://www.youtube.com/shorts/Gue_JdINE7w",
+      "title": "아이돌 데뷔조 메인 보컬은 누구?! 반전 노래 실력에 깜짝 놀란 반응ㄷㄷ 마크툽 - 시작의 아이",
+      "channel": "노래하는배그나",
+      "channel_id": "UC_xAk15E4QZDz0WEQ6GIYeg",
+      "published_at": "2025-05-21T08:21:04Z",
+      "view_count": 2131977,
+      "duration_seconds": 21,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "실력/논란 해설 (미상 데뷔조 메인보컬)",
+        "title_pattern": "'아이돌 데뷔조 메인 보컬은 누구?! 반전 노래 실력 [곡명]'",
+        "low_timeliness_reason": "커버 영상 기반 깜짝 실력 공개 클립으로 분석 각도 부재",
+        "channel_fit": "분석/해설형 채널 톤과 부정합. 단순 커버 리액션 짤",
+        "first_3sec_hook": "의외성형. 커버 노래 도입부 + '반전 실력' 자막",
+        "variation_topic": "데뷔조 메인보컬 선정 기준과 회사별 보컬 트레이닝 시스템 비교 해설",
+        "should_include": false,
+        "exclusion_reason": "1군 아이돌 특정 불가, 단순 커버 클립으로 8개 소재 유형 어디에도 명확히 속하지 않음"
+      }
+    },
+    {
+      "video_id": "tFVHLTfD86M",
+      "url": "https://www.youtube.com/shorts/tFVHLTfD86M",
+      "title": "아이돌의 민망한 무대 위의 실수 #kpop #shorts",
+      "channel": "아쮸",
+      "channel_id": "UCV3lN32Z96I3tE4CaSf_BqA",
+      "published_at": "2025-07-28T12:22:45Z",
+      "view_count": 2074779,
+      "duration_seconds": 48,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "아이돌 일상 상황극 (무대 실수 모음)",
+        "title_pattern": "'아이돌의 [상황] 무대 위의 [사건]'",
+        "low_timeliness_reason": "무대 실수 모음은 시점 무관하게 반복 소비되는 장기 콘텐츠",
+        "channel_fit": "분석형이라기보단 모음형에 가까워 적합성 낮음",
+        "first_3sec_hook": "의외성형. 무대 위 의상·립싱크 사고 클립 연속 편집",
+        "variation_topic": "무대 실수가 아이돌 본인·소속사 대응에 미치는 구조적 영향 분석",
+        "should_include": false,
+        "exclusion_reason": "특정 1군 인물 명시 없는 단순 실수 짤 모음, 분석 각도 부재"
+      }
+    },
+    {
+      "video_id": "521hcuTk1UQ",
+      "url": "https://www.youtube.com/shorts/521hcuTk1UQ",
+      "title": "#화사 #박정민 | 굿굿바이 bye ye ye 모음",
+      "channel": "아콰마린 : aquamarine",
+      "channel_id": "UCVl7vuxEFtOb-PdcnTvmyUg",
+      "published_at": "2025-11-20T02:21:14Z",
+      "view_count": 1975409,
+      "duration_seconds": 38,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "단순 짤 모음 (화사/박정민)",
+        "title_pattern": "'#[인물1] #[인물2] | [노래/유행어] 모음'",
+        "low_timeliness_reason": "유행어 짤 모음은 분석 각도 없이 휘발",
+        "channel_fit": "분석/해설 톤 부정합, 단순 모음 영상",
+        "first_3sec_hook": "유머형. 화사·박정민 '굿굿바이' 반복 컷",
+        "variation_topic": "해당 없음",
+        "should_include": false,
+        "exclusion_reason": "단순 짤 모음, 분석 각도 0. 화사는 1군 리스트 외 솔로, 박정민은 배우. 채널 톤 부정합"
+      }
+    },
+    {
+      "video_id": "o-vTZH9TREA",
+      "url": "https://www.youtube.com/shorts/o-vTZH9TREA",
+      "title": "장카설 말고 장카석 광고라고 #kpop #shorts",
+      "channel": "아쮸",
+      "channel_id": "UCV3lN32Z96I3tE4CaSf_BqA",
+      "published_at": "2025-12-10T22:00:58Z",
+      "view_count": 1870119,
+      "duration_seconds": 20,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "아이돌 일상 상황극 (장원영 광고)",
+        "title_pattern": "'[패러디표현] 말고 [원표현] 광고라고'",
+        "low_timeliness_reason": "장원영 광고 밈은 활동 내내 재소환되는 반복 소비 콘텐츠",
+        "channel_fit": "1군 솔로급 인물(장원영) 등장하나 밈성 짧은 클립으로 분석 각도는 약함",
+        "first_3sec_hook": "유머형. 장원영 광고 장면 + '장카설 아니라 장카석' 자막 패러디",
+        "variation_topic": "장원영 광고가 밈화되는 구조 — IVE 비주얼 마케팅과 광고주 선호 분석",
+        "should_include": false,
+        "exclusion_reason": "단순 밈/짤 패러디 클립으로 분석·해설 각도 부재, 채널 톤(분석형) 부정합"
+      }
+    },
+    {
+      "video_id": "2P8OUM3BBpk",
+      "url": "https://www.youtube.com/shorts/2P8OUM3BBpk",
+      "title": "눈밭에서 Really Like You⁎⁎비하인드 있어요 ❄️",
+      "channel": "BABYMONSTER",
+      "channel_id": "UCqwUnggBBct-AY2lAdI88jQ",
+      "published_at": "2026-01-16T05:00:02Z",
+      "view_count": 1843896,
+      "duration_seconds": 40,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "뮤직비디오/촬영 비하인드 (베이비몬스터)",
+        "title_pattern": "'[장소]에서 [곡명] 비하인드'",
+        "low_timeliness_reason": "공식 채널의 단순 비하인드 클립으로 분석 각도 부재",
+        "channel_fit": "부정합. 분석/해설형이 아닌 자체 프로모션 클립",
+        "first_3sec_hook": "유머형. 눈밭 촬영 현장 멤버들 모습",
+        "variation_topic": "베이비몬스터 혹한기 야외 촬영의 제작 구조와 멤버 컨디션 관리 분석",
+        "should_include": false,
+        "exclusion_reason": "공식 채널의 단순 비하인드 클립 — 해설·분석 각도 없음, 채널 톤(분석형) 부정합"
+      }
+    },
+    {
+      "video_id": "bhTuE_A9uQM",
+      "url": "https://www.youtube.com/shorts/bhTuE_A9uQM",
+      "title": "김종국이 송지효와 절대 안 사겼던 이유! #이슈 #연예인 #쇼츠",
+      "channel": "이해불가 | 연예계 이슈",
+      "channel_id": "UCDQqIkmzmljnkMDyWxMX7Ig",
+      "published_at": "2025-08-22T05:53:26Z",
+      "view_count": 1737476,
+      "duration_seconds": 65,
+      "default_lang": "en",
+      "analysis": {
+        "topic_type": "K-pop 산업 분석 (해당 없음 - 예능인 가십)",
+        "title_pattern": "'[연예인A]가 [연예인B]와 절대 안 사겼던 이유'",
+        "low_timeliness_reason": "런닝맨 멤버 간 관계 가십은 반복 소비되지만 K-pop 아이돌 소재 아님",
+        "channel_fit": "털어드림 채널 부적합. 김종국·송지효는 1군 K-pop 아이돌 아닌 예능인",
+        "first_3sec_hook": "의외성형. 두 사람 투샷 + '절대 안 사겼던 이유' 자막",
+        "variation_topic": "해당 없음 - K-pop 아이돌 소재로 재가공 불가",
+        "should_include": false,
+        "exclusion_reason": "K-pop 1군 아이돌 소재 아님. 예능인(런닝맨) 가십으로 8가지 소재 유형 어디에도 속하지 않음"
+      }
+    },
+    {
+      "video_id": "NXrVbVrCvA4",
+      "url": "https://www.youtube.com/shorts/NXrVbVrCvA4",
+      "title": "올데프 멤버 등장에 조용해진 이유? #shorts #올데이프로젝트 #alldayproject",
+      "channel": "he said :)",
+      "channel_id": "UCibG7LmbNBrOJGPligFDHbg",
+      "published_at": "2025-12-16T06:49:30Z",
+      "view_count": 1438031,
+      "duration_seconds": 21,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "아이돌 일상 상황극 (올데이프로젝트)",
+        "title_pattern": "'[그룹] 멤버 등장에 [반응]해진 이유?'",
+        "low_timeliness_reason": "실물 마주침 시 반응 구조는 그룹 활동 내내 반복 소비되는 장기 소재",
+        "channel_fit": "실물 vs 기대 갭 상황극. 다만 올데이프로젝트는 1군 리스트 외 신생 그룹",
+        "first_3sec_hook": "의외성형. 시끄럽던 현장이 멤버 등장 순간 정적으로 전환되는 컷",
+        "variation_topic": "올데이프로젝트 멤버의 실물 아우라가 만들어낸 현장 정적 — 데뷔 직후 신인의 존재감 구조 분석",
+        "should_include": false,
+        "exclusion_reason": "올데이프로젝트는 1군 아이돌 리스트 외 신생 그룹으로 채널 타깃 부정합"
+      }
+    },
+    {
+      "video_id": "HTxRk3PSXgw",
+      "url": "https://www.youtube.com/shorts/HTxRk3PSXgw",
+      "title": "올데프 조우찬 라이브 클라스 #shorts",
+      "channel": "케이중독자",
+      "channel_id": "UCYqHluFVbHM6VS4X5BIVPdg",
+      "published_at": "2025-06-29T14:46:12Z",
+      "view_count": 1326227,
+      "duration_seconds": 37,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "실력/논란 해설 (올데이프로젝트 조우찬)",
+        "title_pattern": "'[그룹] [멤버] 라이브 클라스'",
+        "low_timeliness_reason": "라이브 실력 입증 콘텐츠는 활동기마다 재소환되는 장기 소재",
+        "channel_fit": "명세 '실력 해설 shorts'와 결은 맞으나 올데이프로젝트는 1군 리스트 외 신인 그룹",
+        "first_3sec_hook": "의외성형. 라이브 고음 장면 + '이게 라이브?' 자막",
+        "variation_topic": "조우찬 라이브 안정성의 보컬 트레이닝 구조 — 더블랙레이블 신인 보컬 시스템 분석",
+        "should_include": false,
+        "exclusion_reason": "올데이프로젝트는 1군 아이돌 리스트 외 신인 그룹, 단순 라이브 클립 위주로 분석 각도 약함"
+      }
+    },
+    {
+      "video_id": "lGMhiErVpXs",
+      "url": "https://www.youtube.com/shorts/lGMhiErVpXs",
+      "title": "요즘 아이돌 라이브 보다가 이거 들으면 바로 비교된다… K보컬 클래스",
+      "channel": "국뽕이",
+      "channel_id": "UCjqY15vp4vdln2T8RVCNJnA",
+      "published_at": "2025-12-30T03:20:02Z",
+      "view_count": 1077408,
+      "duration_seconds": 39,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "실력/논란 해설 (K보컬 라이브 비교)",
+        "title_pattern": "'요즘 아이돌 라이브 보다가 [이것] 들으면 바로 비교된다… [주제]'",
+        "low_timeliness_reason": "라이브 실력 비교는 세대마다 반복 소환되는 영구 소재로 시간이 지나도 유효",
+        "channel_fit": "명세 '실력 논란 해설' 정합. 라이브 실력 격차를 K보컬 계보 구조로 풀어낼 분석 여지 있음",
+        "first_3sec_hook": "비교형. 요즘 아이돌 라이브 클립 → 정통 K보컬 클립 교차 편집 + '바로 비교된다' 자막",
+        "variation_topic": "요즘 아이돌 라이브가 약하게 들리는 구조적 이유 — 퍼포먼스 중심 트레이닝과 보컬 비중 축소가 만든 산업적 변화 분석",
+        "should_include": false,
+        "exclusion_reason": "1군 아이돌 특정 인물·그룹 언급 없고, 일반론적 'K보컬 클래스' 비교 짤로 분석 각도가 모호함"
+      }
+    }
+  ],
+  "waitlist": []
+}
