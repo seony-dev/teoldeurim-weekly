@@ -1,0 +1,380 @@
+{
+  "date_kst": "2026-05-08",
+  "generated_at_utc": "2026-05-08T02:46:45.109957+00:00",
+  "config": {
+    "min_views": 1000000,
+    "max_views": 5000000,
+    "max_duration_seconds": 180,
+    "lookback_days_used": "90~365일 전 (fallback)"
+  },
+  "stats": {
+    "lookback_days": "90~365일 전 (fallback)",
+    "total_collected": 293,
+    "dedup_excluded": 35,
+    "total_after_filter": 17,
+    "hard_filter_excluded": 241,
+    "soft_filter_excluded": 0,
+    "final_count": 17
+  },
+  "candidates": [
+    {
+      "video_id": "kxsBVAxXQcE",
+      "url": "https://www.youtube.com/shorts/kxsBVAxXQcE",
+      "title": "야구 선수 팬이 진짜 무서운 이유ㅋㅋㅋ #shorts #아는형님",
+      "channel": "1분예능모음zip",
+      "channel_id": "UC8pqfCpRwtOeVG3lfvlkb9w",
+      "published_at": "2025-07-07T04:00:53Z",
+      "view_count": 4206993,
+      "duration_seconds": 38,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "GrEHH9EcUmc",
+      "url": "https://www.youtube.com/shorts/GrEHH9EcUmc",
+      "title": "결국 삭제됐다는 부분?",
+      "channel": "도루집",
+      "channel_id": "UCFPLA75HJt9Rhhy0dVT_CsA",
+      "published_at": "2025-12-19T09:24:01Z",
+      "view_count": 4086261,
+      "duration_seconds": 42,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "YJ4yVwpwDYA",
+      "url": "https://www.youtube.com/shorts/YJ4yVwpwDYA",
+      "title": "꿈의 악마 커비 하트 만들기! 케이팝 데몬 헌터스 버전💕 (fancy refill) #Shorts #memes",
+      "channel": "썰레임 Ssuleim",
+      "channel_id": "UCZ0dIs-Ao2v8eZF4WOYH5uw",
+      "published_at": "2025-08-25T13:46:32Z",
+      "view_count": 4037623,
+      "duration_seconds": 31,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "sNdubHdSAig",
+      "url": "https://www.youtube.com/shorts/sNdubHdSAig",
+      "title": "여자아이돌에게 공을 던진 남자아이돌 #kpop #shorts",
+      "channel": "아쮸",
+      "channel_id": "UCV3lN32Z96I3tE4CaSf_BqA",
+      "published_at": "2025-08-27T20:44:30Z",
+      "view_count": 3076498,
+      "duration_seconds": 26,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "fGRJ8Cqijrc",
+      "url": "https://www.youtube.com/shorts/fGRJ8Cqijrc",
+      "title": "[아이브] 안무 연습중에 혼자 즐기는 이서 #shorts",
+      "channel": "세상너",
+      "channel_id": "UCIHCBn659_uiViK6fxMHLMA",
+      "published_at": "2026-01-31T03:19:38Z",
+      "view_count": 2752326,
+      "duration_seconds": 18,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "GYvOcrtFI8s",
+      "url": "https://www.youtube.com/shorts/GYvOcrtFI8s",
+      "title": "[TXT] 타고난 날티는 척으로도 못 따라간다 #아이돌 #shorts",
+      "channel": "아이돌이슈_숏츠",
+      "channel_id": "UC7t3kv9zHuMBo-JtcM0Rx5A",
+      "published_at": "2025-08-08T09:36:23Z",
+      "view_count": 2381563,
+      "duration_seconds": 7,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "WlPEIbq7ou0",
+      "url": "https://www.youtube.com/shorts/WlPEIbq7ou0",
+      "title": "걸그룹에서 손톱짧은 멤버가 이용당하는 이유",
+      "channel": "오늘도프미나",
+      "channel_id": "UCjKeBvi1hImQWBifEDwpfKw",
+      "published_at": "2026-02-02T12:10:02Z",
+      "view_count": 2151051,
+      "duration_seconds": 27,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "Gue_JdINE7w",
+      "url": "https://www.youtube.com/shorts/Gue_JdINE7w",
+      "title": "아이돌 데뷔조 메인 보컬은 누구?! 반전 노래 실력에 깜짝 놀란 반응ㄷㄷ 마크툽 - 시작의 아이",
+      "channel": "노래하는배그나",
+      "channel_id": "UC_xAk15E4QZDz0WEQ6GIYeg",
+      "published_at": "2025-05-21T08:21:04Z",
+      "view_count": 2132077,
+      "duration_seconds": 21,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "521hcuTk1UQ",
+      "url": "https://www.youtube.com/shorts/521hcuTk1UQ",
+      "title": "#화사 #박정민 | 굿굿바이 bye ye ye 모음",
+      "channel": "아콰마린 : aquamarine",
+      "channel_id": "UCVl7vuxEFtOb-PdcnTvmyUg",
+      "published_at": "2025-11-20T02:21:14Z",
+      "view_count": 1975491,
+      "duration_seconds": 38,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "InRzlxm_wBY",
+      "url": "https://www.youtube.com/shorts/InRzlxm_wBY",
+      "title": "어렵다는 스넥유 4시간만에 녹음해버린 정국#방탄소년단 #bts #standingnexttoyou",
+      "channel": "팝픽",
+      "channel_id": "UC9K0hwfvDQJQJJKyrbgi8zQ",
+      "published_at": "2026-02-02T11:16:59Z",
+      "view_count": 1941076,
+      "duration_seconds": 49,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "2P8OUM3BBpk",
+      "url": "https://www.youtube.com/shorts/2P8OUM3BBpk",
+      "title": "눈밭에서 Really Like You⁎⁎비하인드 있어요 ❄️",
+      "channel": "BABYMONSTER",
+      "channel_id": "UCqwUnggBBct-AY2lAdI88jQ",
+      "published_at": "2026-01-16T05:00:02Z",
+      "view_count": 1854650,
+      "duration_seconds": 40,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "bhTuE_A9uQM",
+      "url": "https://www.youtube.com/shorts/bhTuE_A9uQM",
+      "title": "김종국이 송지효와 절대 안 사겼던 이유! #이슈 #연예인 #쇼츠",
+      "channel": "이해불가 | 연예계 이슈",
+      "channel_id": "UCDQqIkmzmljnkMDyWxMX7Ig",
+      "published_at": "2025-08-22T05:53:26Z",
+      "view_count": 1741455,
+      "duration_seconds": 65,
+      "default_lang": "en",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "HTxRk3PSXgw",
+      "url": "https://www.youtube.com/shorts/HTxRk3PSXgw",
+      "title": "올데프 조우찬 라이브 클라스 #shorts",
+      "channel": "케이중독자",
+      "channel_id": "UCYqHluFVbHM6VS4X5BIVPdg",
+      "published_at": "2025-06-29T14:46:12Z",
+      "view_count": 1328774,
+      "duration_seconds": 37,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "-u5IzSc9QuM",
+      "url": "https://www.youtube.com/shorts/-u5IzSc9QuM",
+      "title": "요즘 사람들이 굳이 아이돌 안하려는 이유",
+      "channel": "해달특파원",
+      "channel_id": "UC5EvMz_XliMULpqQHkjnzgQ",
+      "published_at": "2026-02-02T04:05:00Z",
+      "view_count": 1295494,
+      "duration_seconds": 46,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "Caj9QPTR1yY",
+      "url": "https://www.youtube.com/shorts/Caj9QPTR1yY",
+      "title": "윤은혜x김종국 '당연하지' 비하인드 #shorts",
+      "channel": "빵공장",
+      "channel_id": "UCWJcyi-Rpll9CZ1MFS9OWwg",
+      "published_at": "2025-07-16T09:01:52Z",
+      "view_count": 1274611,
+      "duration_seconds": 51,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "lGMhiErVpXs",
+      "url": "https://www.youtube.com/shorts/lGMhiErVpXs",
+      "title": "요즘 아이돌 라이브 보다가 이거 들으면 바로 비교된다… K보컬 클래스",
+      "channel": "국뽕이",
+      "channel_id": "UCjqY15vp4vdln2T8RVCNJnA",
+      "published_at": "2025-12-30T03:20:02Z",
+      "view_count": 1077453,
+      "duration_seconds": 39,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "jJpQm7EzcLs",
+      "url": "https://www.youtube.com/shorts/jJpQm7EzcLs",
+      "title": "[키스오브라이프] 나띠의 생각이 보이는 슈가코트 안무 비하인드",
+      "channel": "쥴리바보",
+      "channel_id": "UC-7UxrX3oiTXuyRCfXsZgnQ",
+      "published_at": "2026-02-06T09:01:14Z",
+      "view_count": 1008756,
+      "duration_seconds": 27,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "(분석 실패)",
+        "title_pattern": "",
+        "low_timeliness_reason": "",
+        "channel_fit": "",
+        "first_3sec_hook": "",
+        "variation_topic": "",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    }
+  ],
+  "soft_excluded": [],
+  "waitlist": []
+}
