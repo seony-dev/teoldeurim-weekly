@@ -1535,6 +1535,7 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlis
 
     return f"""<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<base target="_blank">
 <title>털어드림 · K-pop Shorts 소싱 리포트 {today_label}</title>
 <style>{REPORT_CSS}</style>
 </head><body><div class="page">
