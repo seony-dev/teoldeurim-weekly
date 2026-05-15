@@ -1,0 +1,70 @@
+name: 털어드림 리포트 재발송 (본인만)
+
+# 수동 실행 전용 — 가장 최근 history를 수집·분석 없이 메일만 재발송.
+# RECIPIENT_EMAIL_SELF 시크릿(본인 메일만)으로 발송 → 대표님/팀원에게는 안 감.
+on:
+  workflow_dispatch:
+
+# 주간 메일러와 동시 실행 방지
+concurrency:
+  group: weekly-mailer
+  cancel-in-progress: false
+
+jobs:
+  resend-latest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 레포 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 의존성 설치
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ============================================================
+      # 시크릿 검증 — 재발송은 수집·분석 안 하므로 메일 시크릿 위주.
+      # (load_env가 5개 전부 요구하므로 YOUTUBE/ANTHROPIC도 전달은 함)
+      # ============================================================
+      - name: 시크릿 검증
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          RECIPIENT_EMAIL_SELF: ${{ secrets.RECIPIENT_EMAIL_SELF }}
+        run: |
+          set -e
+          fail=0
+          check() {
+            if [ "$2" -eq 0 ]; then echo "❌ $1: 등록 안 됨"; fail=1
+            else echo "✅ $1: 등록됨 (길이 $2)"; fi
+          }
+          check GMAIL_ADDRESS ${#GMAIL_ADDRESS}
+          check GMAIL_APP_PASSWORD ${#GMAIL_APP_PASSWORD}
+          check RECIPIENT_EMAIL_SELF ${#RECIPIENT_EMAIL_SELF}
+          if [ $fail -eq 1 ]; then
+            echo ""
+            echo "👉 Settings → Secrets에서 위 시크릿을 확인하세요."
+            echo "   특히 RECIPIENT_EMAIL_SELF (본인 메일만) 가 등록돼 있어야 합니다."
+            exit 1
+          fi
+
+      # ============================================================
+      # 최신 history 재발송 — RESEND_LATEST=1, 수신자는 본인만
+      # ============================================================
+      - name: 최신 리포트 재발송
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL_SELF }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          RESEND_LATEST: '1'
+          PYTHONUNBUFFERED: '1'
+        run: python scripts/weekly.py

@@ -2032,6 +2032,8 @@ def main():
     force_rescan = os.environ.get("FORCE_RESCAN", "").strip().lower() in ("1", "true", "yes")
     # DRY_RUN: 메일 발송 안 함, history 미변경, preview HTML만 local_output에 저장
     dry_run = os.environ.get("DRY_RUN", "").strip().lower() in ("1", "true", "yes")
+    # RESEND_LATEST: 가장 최근 history를 수집·분석 없이 메일만 재발송
+    resend_latest = os.environ.get("RESEND_LATEST", "").strip().lower() in ("1", "true", "yes")
 
     report_data_path = LOCAL_OUTPUT_DIR / f"report_data_{date_slug}.json"
 
@@ -2041,15 +2043,44 @@ def main():
     print(f"로그 파일: {log_path.relative_to(ROOT)}")
     if dry_run:
         print("⚠️  DRY_RUN 모드 — 메일 발송 안 함 / history 미변경")
+    if resend_latest:
+        print("📨 RESEND_LATEST 모드 — 최신 history 메일만 재발송 (수집·분석 없음)")
     print("=" * 60)
 
     try:
         bundle = None  # {top, meta, soft_excluded, waitlist, lookback_used, report_lists}
 
         # ============================================================
+        # RESEND_LATEST 모드: 가장 최근 history를 수집·분석 없이 메일만 재발송
+        # ============================================================
+        if resend_latest:
+            files = sorted(p for p in HISTORY_DIR.glob("*.json")
+                           if re.fullmatch(r"\d{4}-\d{2}-\d{2}", p.stem))
+            if not files:
+                raise RuntimeError("재발송할 history 파일이 없습니다 (history/ 비어있음)")
+            latest = files[-1]
+            print(f"\n[RESEND] 최신 history 재발송 → {latest.name}")
+            archive = json.loads(latest.read_text(encoding="utf-8"))
+            cands = archive["candidates"]
+            bundle = {
+                "top": cands,
+                "meta": archive["stats"],
+                "soft_excluded": archive.get("soft_excluded", []),
+                "waitlist": archive.get("waitlist", []),
+                "lookback_used": archive["config"]["lookback_days_used"],
+                "report_lists": archive.get("report_lists", {
+                    "dedup_excluded": [], "hard_excluded": [], "hard_passed": cands,
+                }),
+            }
+            # 메일 제목/파일명을 해당 history 날짜 기준으로
+            date_slug = archive.get("date_kst", latest.stem)
+            today_label = f"{date_slug} (재발송)"
+            print(f"  로드: 최종 {len(cands)}개 ({date_slug} 분량)")
+
+        # ============================================================
         # DRY_RUN 재렌더 캐시: 같은 날 report_data 캐시 있으면 파이프라인 스킵
         # ============================================================
-        if dry_run and report_data_path.exists() and not force_rescan:
+        elif dry_run and report_data_path.exists() and not force_rescan:
             print(f"\n[DRY_RUN] report_data 캐시 발견 → 파이프라인 스킵, HTML만 재생성")
             print(f"  파일: {report_data_path.relative_to(ROOT)}")
             print(f"  💡 새로 수집하려면: $env:FORCE_RESCAN=\"1\" 추가")
@@ -2212,8 +2243,9 @@ def main():
 
         # ============================================================
         # 일반 모드 — history 저장 (파이프라인 새로 돌렸을 때만) + 메일 발송
+        # RESEND_LATEST 모드는 history 절대 안 건드림
         # ============================================================
-        if (not arc_path.exists()) or force_rescan:
+        if not resend_latest and ((not arc_path.exists()) or force_rescan):
             print(f"\n[STEP 5] history 아카이브")
             archive = {
                 "date_kst": date_slug,
