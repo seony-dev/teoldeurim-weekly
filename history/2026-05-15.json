@@ -1,0 +1,86 @@
+{
+  "date_kst": "2026-05-15",
+  "generated_at_utc": "2026-05-15T02:56:03.853909+00:00",
+  "config": {
+    "min_views": 1000000,
+    "max_views": 5000000,
+    "max_duration_seconds": 180,
+    "lookback_days_used": "90~365일 전 (fallback)"
+  },
+  "stats": {
+    "lookback_days": "90~365일 전 (fallback)",
+    "total_collected": 295,
+    "dedup_excluded": 49,
+    "total_after_filter": 3,
+    "hard_filter_excluded": 243,
+    "soft_filter_excluded": 0,
+    "final_count": 3
+  },
+  "candidates": [
+    {
+      "video_id": "Ya_SwpWBR3U",
+      "url": "https://www.youtube.com/shorts/Ya_SwpWBR3U",
+      "title": "SM에서 유일하게 전원 자기 발로 들어온 걸그룹 #shorts",
+      "channel": "K팝과몰입러",
+      "channel_id": "UCLILKYP0GU5S5JrGFryBK_A",
+      "published_at": "2025-08-14T08:26:51Z",
+      "view_count": 2122089,
+      "duration_seconds": 60,
+      "default_lang": "en",
+      "analysis": {
+        "topic_type": "K-pop 산업 분석 (SM 걸그룹 캐스팅 시스템)",
+        "title_pattern": "'[회사]에서 유일하게 [특이조건]인 [그룹유형]'",
+        "low_timeliness_reason": "SM 캐스팅 시스템과 그룹 결성 비화는 시간이 지나도 반복 소환되는 구조적 소재",
+        "channel_fit": "명세 '산업 분석 shorts' 정합. SM 길거리 캐스팅 전통 vs 자발적 지원이라는 시스템 대비를 분석 각도로 풀 수 있음",
+        "first_3sec_hook": "의외성형. SM 로고 + '캐스팅 안 당하고 직접 찾아온 유일한 팀' 자막 + 그룹 멤버 사진 등장",
+        "variation_topic": "SM 길거리 캐스팅 신화가 깨진 그룹 — 자발적 오디션 지원이 만든 멤버 구성과 팀 케미의 구조적 차이 해설",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "DN6_ffMTo7k",
+      "url": "https://www.youtube.com/shorts/DN6_ffMTo7k",
+      "title": "무조건 빠지게 되는 백지헌 짧은 치마 온도차",
+      "channel": "나 잘한다해짜나",
+      "channel_id": "UC84G3UgA0hr84VJ_T_f1vrA",
+      "published_at": "2025-12-20T02:25:16Z",
+      "view_count": 2087114,
+      "duration_seconds": 21,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "아이돌 일상 상황극 (르세라핌 백지헌)",
+        "title_pattern": "'무조건 빠지게 되는 [아이돌] [특징] 온도차'",
+        "low_timeliness_reason": "무대 위 vs 평소 갭 콘텐츠는 활동기와 무관하게 반복 소비되는 영구 소재",
+        "channel_fit": "명세 '실물 vs 무대 갭 shorts' 정합. 1군 멤버 백지헌의 온도차를 분석 각도로 확장 가능",
+        "first_3sec_hook": "비교형. 무대 위 강렬한 백지헌 / 평소 청순한 백지헌 컷 교차 + '온도차 실화?' 자막",
+        "variation_topic": "백지헌의 무대-평소 페르소나 격차가 르세라핌 팬덤 유입에 작동하는 구조 분석",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    },
+    {
+      "video_id": "3DiFf8Oet2c",
+      "url": "https://www.youtube.com/shorts/3DiFf8Oet2c",
+      "title": "정국 앵콜무대 음치논란(?)터진 이유 #방탄소년단 #bts #정국",
+      "channel": "팝픽",
+      "channel_id": "UC9K0hwfvDQJQJJKyrbgi8zQ",
+      "published_at": "2026-01-12T12:07:23Z",
+      "view_count": 1266451,
+      "duration_seconds": 35,
+      "default_lang": "ko",
+      "analysis": {
+        "topic_type": "실력 논란 해설 (BTS 정국)",
+        "title_pattern": "'[인물] [무대] [실력요소]논란 터진 이유'",
+        "low_timeliness_reason": "라이브 음치 논란은 활동기마다 반복 소환되는 구조적 소재로 시간이 지나도 유효",
+        "channel_fit": "명세 '실력 논란 이유 shorts' 정합. 1군 톱티어 인물 + '이유' 분석 각도",
+        "first_3sec_hook": "의외성형. 정국 앵콜 무대 음정 흔들린 구간 클립 + '왜 음치 소리 들었나' 자막",
+        "variation_topic": "정국 앵콜 음정 흔들림의 원인 — 인이어 환경·앵콜 특유 떼창·체력 소진 구조를 보컬 메커니즘 관점에서 해부",
+        "should_include": true,
+        "exclusion_reason": ""
+      }
+    }
+  ],
+  "soft_excluded": [],
+  "waitlist": []
+}
