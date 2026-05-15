@@ -23,4 +23,5 @@ logs/
 build_ppt/
 *.pptx
 *.pdf
+*.html
 node_modules/

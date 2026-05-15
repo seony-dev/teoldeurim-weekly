@@ -101,6 +101,7 @@ HISTORY_DIR = ROOT / "history"
 HISTORY_DIR.mkdir(exist_ok=True)
 LOGS_DIR = ROOT / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
+LOCAL_OUTPUT_DIR = ROOT / "local_output"  # DRY_RUN 미리보기 저장 (gitignore됨)
 
 
 class Tee:
@@ -237,27 +238,36 @@ def search_videos(api_key, query, published_after, published_before):
     return [it["id"]["videoId"] for it in data.get("items", []) if it.get("id", {}).get("videoId")]
 
 
-def load_seen_video_ids(skip_filename=None):
-    """history/*.json에서 이미 발송된 영상의 video_id 집합을 반환.
+def load_seen_video_meta(skip_filename=None):
+    """history/*.json에서 이미 발송된 영상의 메타데이터를 {video_id: dict}로 반환.
 
-    매주 신선한 후보 보장용. skip_filename에 해당하는 파일은 제외 (resume 모드에서
-    오늘자 history와 자기 자신을 비교하지 않게).
+    매주 신선한 후보 보장용 + dedup 탭에 영상 정보를 표시하기 위함.
+    각 dict에는 원본 메타데이터 + 'sent_date'(발송일)가 포함됨.
+    skip_filename에 해당하는 파일은 제외 (resume 모드에서 오늘자 history 자기 자신 비교 방지).
     """
-    seen = set()
+    seen = {}
     if not HISTORY_DIR.exists():
         return seen
-    for path in HISTORY_DIR.glob("*.json"):
+    for path in sorted(HISTORY_DIR.glob("*.json")):
         if skip_filename and path.name == skip_filename:
             continue
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
+            sent_date = data.get("date_kst") or path.stem
             for c in data.get("candidates", []):
                 vid = c.get("video_id")
                 if vid:
-                    seen.add(vid)
+                    m = dict(c)
+                    m["sent_date"] = sent_date
+                    seen[vid] = m  # 가장 최근 발송 기록으로 덮어씀
         except Exception as e:
             print(f"  ⚠️ history 로드 실패 [{path.name}]: {e}")
     return seen
+
+
+def load_seen_video_ids(skip_filename=None):
+    """과거 발송 video_id 집합 (load_seen_video_meta의 키만)."""
+    return set(load_seen_video_meta(skip_filename).keys())
 
 
 def fetch_video_details(api_key, ids):
@@ -313,17 +323,40 @@ def blocked_by_keyword(title):
 # ============================================================================
 # 수집 + 필터링
 # ============================================================================
-def collect(api_key, days_oldest, days_newest, seen_ids=None):
+def hard_filter_reason(row):
+    """row가 하드 필터에 걸리면 (사유 문자열, drop키) 반환. 통과면 (None, None).
+
+    필터 기준·로직은 기존과 동일 — 단지 탈락 사유를 문자열로 남기는 것뿐.
+    """
+    v = row["view_count"]
+    if v < CONFIG["MIN_VIEWS"]:
+        return f"조회수 {CONFIG['MIN_VIEWS']//10000}만 미만 ({v:,}회)", "min_views"
+    if v >= CONFIG["MAX_VIEWS"]:
+        return f"조회수 {CONFIG['MAX_VIEWS']//10000}만 이상 ({v:,}회)", "max_views"
+    d = row["duration_seconds"]
+    if not (0 < d <= CONFIG["MAX_DURATION_SEC"]):
+        return f"Shorts 길이 초과 ({d}초 / 제한 {CONFIG['MAX_DURATION_SEC']}초)", "duration"
+    if not has_korean(row["title"]):
+        return "한국어 제목 아님", "korean"
+    if row["channel"] in CONFIG["CHANNEL_BLOCKLIST"] or row["channel_id"] in CONFIG.get("CHANNEL_ID_BLOCKLIST", set()):
+        return f"채널 차단 ({row['channel']})", "channel"
+    if blocked_by_keyword(row["title"]):
+        return "제목 키워드 차단 (직캠/풀캠 등)", "keyword"
+    return None, None
+
+
+def collect(api_key, days_oldest, days_newest, seen_meta=None):
     """특정 기간 풀에서 영상 수집 + 하드 필터 + 중복 제외.
 
-    days_oldest: 가장 오래된 한계 (예: 365 → 1년 전부터)
-    days_newest: 가장 최근 한계 (예: 180 → 6개월 전까지)
-                 → 이 둘 사이의 영상만 검색됨 (예: 6개월~1년 전 사이)
-    seen_ids: 과거 history에서 이미 발송된 video_id 집합. 미리 제외해서 다음 단계
-    분석 비용(Claude API)을 절감.
+    days_oldest/days_newest: 검색 기간 한계 (예: 180~365 → 6개월~1년 전 사이)
+    seen_meta: 과거 발송 영상 {video_id: 메타데이터} 딕셔너리.
+
+    반환: candidates(하드 통과) + hard_excluded(하드 탈락, 사유 포함) +
+          dedup_list(중복 제외, 과거 메타데이터 포함) — 리포트 렌더링용 전체 리스트.
     """
-    if seen_ids is None:
-        seen_ids = set()
+    if seen_meta is None:
+        seen_meta = {}
+    seen_ids = set(seen_meta.keys())
 
     now = datetime.now(timezone.utc)
     pa = (now - timedelta(days=days_oldest)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -342,46 +375,58 @@ def collect(api_key, days_oldest, days_newest, seen_ids=None):
 
     # 중복 제외 — history에서 이미 발송된 ID 컷 (Claude 분석 비용 절감)
     fresh_ids = all_ids - seen_ids
-    dedup_excluded = len(all_ids) - len(fresh_ids)
+    dedup_ids = all_ids & seen_ids
     if seen_ids:
-        print(f"  중복 제외: {dedup_excluded}개 (이미 발송된 영상) → 신규 {len(fresh_ids)}개")
+        print(f"  중복 제외: {len(dedup_ids)}개 (이미 발송된 영상) → 신규 {len(fresh_ids)}개")
+
+    # dedup 리스트 — 과거 history 메타데이터에서 복원 (리포트 표시용)
+    dedup_list = []
+    for vid in dedup_ids:
+        m = dict(seen_meta.get(vid, {}))
+        m.setdefault("video_id", vid)
+        m.setdefault("url", f"https://www.youtube.com/shorts/{vid}")
+        m.setdefault("title", "(과거 발송 영상)")
+        m.setdefault("channel", "")
+        m.setdefault("view_count", 0)
+        m.setdefault("duration_seconds", 0)
+        m.setdefault("published_at", "")
+        m["stage"] = "dedup_excluded"
+        m["status_label"] = "중복 제외"
+        m["exclusion_reason"] = f"과거 발송 이력 중복 ({m.get('sent_date', '?')} 발송)"
+        dedup_list.append(m)
+    dedup_list.sort(key=lambda x: -x.get("view_count", 0))
 
     details = fetch_video_details(api_key, list(fresh_ids))
     print(f"  메타데이터: {len(details)}개")
 
     candidates = []
+    hard_excluded = []
     drop = {"min_views": 0, "max_views": 0, "duration": 0, "korean": 0, "channel": 0, "keyword": 0}
     for v in details:
         try:
             row = parse_item(v)
         except Exception:
             continue
-        if row["view_count"] < CONFIG["MIN_VIEWS"]:
-            drop["min_views"] += 1
-            continue
-        if row["view_count"] >= CONFIG["MAX_VIEWS"]:
-            drop["max_views"] += 1
-            continue
-        if not (0 < row["duration_seconds"] <= CONFIG["MAX_DURATION_SEC"]):
-            drop["duration"] += 1
-            continue
-        if not has_korean(row["title"]):
-            drop["korean"] += 1
-            continue
-        if row["channel"] in CONFIG["CHANNEL_BLOCKLIST"] or row["channel_id"] in CONFIG.get("CHANNEL_ID_BLOCKLIST", set()):
-            drop["channel"] += 1
-            continue
-        if blocked_by_keyword(row["title"]):
-            drop["keyword"] += 1
-            continue
-        candidates.append(row)
+        reason, dropkey = hard_filter_reason(row)
+        if reason:
+            drop[dropkey] += 1
+            row["stage"] = "hard_excluded"
+            row["status_label"] = "자동 필터 컷"
+            row["exclusion_reason"] = reason
+            hard_excluded.append(row)
+        else:
+            row["stage"] = "hard_passed"
+            candidates.append(row)
     print(f"  필터 탈락: 조회수↓{drop['min_views']} 조회수↑{drop['max_views']} 길이{drop['duration']} 비한국어{drop['korean']} 채널{drop['channel']} 키워드{drop['keyword']}")
 
     candidates.sort(key=lambda x: -x["view_count"])
+    hard_excluded.sort(key=lambda x: -x["view_count"])
     return {
         "candidates": candidates,
+        "hard_excluded": hard_excluded,
+        "dedup_list": dedup_list,
         "total_collected": len(all_ids),
-        "dedup_excluded": dedup_excluded,
+        "dedup_excluded": len(dedup_ids),
         "total_detailed": len(details),
     }
 
@@ -870,11 +915,14 @@ body {
 .hero-meta span b { color: var(--ink-2); font-weight: 700; margin-left: 6px; }
 
 .stats {
-  display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px;
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px;
   background: var(--border); border: 1px solid var(--border);
   border-radius: var(--radius); overflow: hidden; margin-bottom: 88px;
 }
-@media (max-width: 720px) {
+@media (max-width: 900px) {
+  .stats { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 560px) {
   .stats { grid-template-columns: repeat(2, 1fr); }
 }
 .stat { background: var(--bg); padding: 28px 24px; display: flex; flex-direction: column; gap: 4px; }
@@ -1088,6 +1136,157 @@ body {
   overflow: hidden;
 }
 
+/* ===== 접이식 필터 기준 박스 (stats 위) ===== */
+.criteria-toggle {
+  margin-bottom: 20px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--bg); overflow: hidden;
+}
+.criteria-toggle > summary {
+  cursor: pointer; list-style: none; padding: 14px 22px;
+  font-size: 13px; font-weight: 700; color: var(--ink-2);
+  display: flex; align-items: center; gap: 8px; user-select: none;
+}
+.criteria-toggle > summary::-webkit-details-marker { display: none; }
+.criteria-toggle > summary::before {
+  content: "▸"; color: var(--accent); font-size: 11px;
+  transition: transform .15s;
+}
+.criteria-toggle[open] > summary::before { transform: rotate(90deg); }
+.criteria-toggle > summary:hover { background: var(--bg-subtle); }
+.criteria-toggle .criteria { margin: 0; border: none; border-top: 1px solid var(--border); border-radius: 0; }
+
+/* ===== stats 카드 → 탭 (JS 있을 때만 인터랙티브) ===== */
+.stats .stat {
+  border: none; text-align: left; width: 100%;
+  font-family: inherit; position: relative; cursor: default;
+}
+html.js .stats .stat { cursor: pointer; transition: background .12s; }
+html.js .stats .stat:hover { background: var(--bg-subtle); }
+html.js .stats .stat.primary:hover { background: #1f1f1f; }
+html.js .stats .stat.active {
+  outline: 2.5px solid var(--accent); outline-offset: -2.5px; z-index: 2;
+}
+html.js .stats .stat.active::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: var(--accent);
+}
+html.js .stats .stat.primary.active { outline-color: var(--highlight); }
+html.js .stats .stat.primary.active::after { background: var(--highlight); }
+
+/* ===== 검색 바 (JS 있을 때만 표시) ===== */
+.search-bar {
+  display: none; align-items: center; gap: 12px;
+  margin-bottom: 18px; flex-wrap: wrap;
+}
+html.js .search-bar { display: flex; }
+
+/* JS 유무에 따른 표시 토글 */
+.js-only { display: none; }
+html.js .js-only { display: inline; }
+html.js .nojs-only { display: none; }
+/* JS 없으면 최종 발송 패널만 노출 (다른 패널은 is-hidden 그대로) */
+.search-input {
+  flex: 1; min-width: 240px; font-family: inherit; font-size: 14px;
+  padding: 11px 16px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--ink); background: var(--bg);
+  outline: none;
+}
+.search-input:focus { border-color: var(--accent); }
+.search-input::placeholder { color: var(--ink-light); }
+.search-count {
+  font-size: 13px; color: var(--ink-dim); font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.search-count b { color: var(--accent); font-weight: 800; }
+
+/* ===== 단계별 패널 + 리스트 ===== */
+.stage-panel { }
+.stage-panel-head {
+  display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px;
+}
+.stage-panel-head h2 {
+  font-size: 26px; font-weight: 900; letter-spacing: -0.03em; color: var(--ink);
+}
+.stage-panel-head .cnt {
+  font-size: 13px; font-weight: 600; color: var(--ink-light);
+}
+.stage-panel-desc {
+  font-size: 13px; color: var(--ink-dim); line-height: 1.6;
+  margin-bottom: 20px; padding-top: 12px; border-top: 2px solid var(--ink);
+}
+.stage-list {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+
+/* 컴팩트 리스트 아이템 */
+.si {
+  display: grid; grid-template-columns: 44px 1fr auto; gap: 14px;
+  padding: 13px 18px; border-bottom: 1px solid var(--border);
+  align-items: start;
+}
+.si:last-child { border-bottom: none; }
+.si-rank {
+  font-size: 13px; font-weight: 800; color: var(--ink-light);
+  font-variant-numeric: tabular-nums; padding-top: 2px;
+}
+.si-body { min-width: 0; }
+.si-title {
+  font-size: 14px; font-weight: 700; color: var(--ink); line-height: 1.4;
+  margin-bottom: 5px; word-break: keep-all;
+}
+.si-title a { color: inherit; text-decoration: none; }
+.si-title a:hover { color: var(--accent); }
+.si-meta { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.si-reason {
+  margin-top: 7px; font-size: 12px; line-height: 1.5; color: var(--ink-2);
+  background: var(--bg-subtle); border-left: 3px solid var(--ink-light);
+  padding: 6px 10px; border-radius: var(--radius-sm);
+}
+.si-reason.cut { background: #fafaf8; border-left-color: #c44; }
+.si-reason.dedup { background: #f4f7fb; border-left-color: #2a5278; }
+.si-reason b {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; margin-right: 6px;
+}
+.si-reason.cut b { color: #c44; }
+.si-reason.dedup b { color: #2a5278; }
+.si-views { text-align: right; white-space: nowrap; }
+.si-views-n {
+  font-size: 18px; font-weight: 900; color: var(--ink);
+  font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+}
+.si-views-u { font-size: 11px; color: var(--ink-dim); font-weight: 500; }
+
+/* 상태 badge */
+.badge {
+  font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px;
+  white-space: nowrap;
+}
+.badge-final { color: #fff; background: var(--ink); }
+.badge-soft { color: #fff; background: #c44; }
+.badge-hard { color: #fff; background: var(--ink-light); }
+.badge-dedup { color: #fff; background: #2a5278; }
+.badge-wait { color: var(--accent); background: var(--accent-bg); border: 1px solid var(--accent); }
+.badge-na { color: var(--ink-dim); background: var(--bg-subtle); }
+
+/* empty state */
+.empty-state {
+  padding: 56px 24px; text-align: center; color: var(--ink-light);
+  font-size: 14px;
+}
+.empty-state .big { font-size: 32px; margin-bottom: 10px; }
+
+/* 더보기 버튼 */
+.more-btn {
+  display: block; width: 100%; padding: 14px; cursor: pointer;
+  background: var(--bg-subtle); border: none; border-top: 1px solid var(--border);
+  font-family: inherit; font-size: 13px; font-weight: 700; color: var(--accent);
+}
+.more-btn:hover { background: #ecebe5; }
+
+.is-hidden { display: none !important; }
+
 @media print {
   body { background: white; }
   .page { max-width: 100%; padding: 24px 28px; }
@@ -1097,11 +1296,11 @@ body {
 """
 
 
-def _render_candidate_card(i, v):
-    """단일 후보 카드 — 6개 분석 필드 포함."""
+def _render_candidate_card(i, v, data_search=""):
+    """단일 후보 카드 — 6개 분석 필드 포함. data_search: 검색용 텍스트."""
     a = v.get("analysis", {})
     return f"""
-    <div class="candidate">
+    <div class="candidate" data-search="{data_search}">
       <div class="cand-top">
         <div class="cand-rank">{i:02d}</div>
         <div class="cand-title-wrap">
@@ -1207,14 +1406,133 @@ def _render_waitlist_card(i, v):
     </div>"""
 
 
-def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlist=None):
-    """첨부 HTML 리포트 — 와이드 레이아웃, hero, stats, 풍부한 카드 + soft 탈락 사유 + 보류 풀."""
+def _si_search_text(item):
+    """리스트 아이템의 검색용 텍스트 (제목·채널·사유·분석 텍스트 전부 합침, 소문자)."""
+    parts = [item.get("title", ""), item.get("channel", ""), item.get("exclusion_reason", "")]
+    a = item.get("analysis") or {}
+    for k in ("topic_type", "title_pattern", "low_timeliness_reason",
+              "channel_fit", "first_3sec_hook", "variation_topic", "exclusion_reason"):
+        parts.append(str(a.get(k, "")))
+    joined = " ".join(p for p in parts if p)
+    return esc_html(joined.lower())
+
+
+_BADGE_CLASS = {
+    "최종 발송": "badge-final", "AI 컷": "badge-soft", "자동 필터 컷": "badge-hard",
+    "중복 제외": "badge-dedup", "대기": "badge-wait", "미분석": "badge-na",
+}
+
+
+def _badge_html(label):
+    if not label:
+        return ""
+    return f'<span class="badge {_BADGE_CLASS.get(label, "badge-na")}">{esc_html(label)}</span>'
+
+
+def _render_si_row(i, item):
+    """컴팩트 리스트 행 — 제목·채널·조회수·상태 badge·사유."""
+    pub = (item.get("published_at", "") or "")[:10]
+    status = item.get("status_label", "")
+    reason = item.get("exclusion_reason", "")
+    stage = item.get("stage", "")
+    reason_html = ""
+    if reason:
+        rcls = "dedup" if stage == "dedup_excluded" else "cut"
+        reason_html = f'<div class="si-reason {rcls}"><b>사유</b>{esc_html(reason)}</div>'
+    return f"""
+    <div class="si" data-search="{_si_search_text(item)}">
+      <div class="si-rank">{i:02d}</div>
+      <div class="si-body">
+        <div class="si-title"><a href="{item.get('url', '#')}">{esc_html(item.get('title', ''))}</a></div>
+        <div class="si-meta">
+          <span class="chip chip-channel">@{esc_html(item.get('channel', ''))}</span>
+          <span class="chip chip-date">{pub}</span>
+          <span class="chip chip-dur">{item.get('duration_seconds', 0)}초</span>
+          {_badge_html(status)}
+        </div>
+        {reason_html}
+      </div>
+      <div class="si-views">
+        <div><span class="si-views-n">{fmt_views(item.get('view_count', 0))}</span><span class="si-views-u">회</span></div>
+      </div>
+    </div>"""
+
+
+# 탭 메타데이터: (stage_key, 라벨, stat 숫자 키, 패널 제목, 패널 설명)
+_STAGE_TABS = [
+    ("collected", "수집한 영상", "total_collected", "수집한 영상 전체",
+     "22개 검색어로 수집한 raw 후보 전체. 각 항목에 최종 단계 badge가 표시됩니다."),
+    ("dedup_excluded", "중복 제외", "dedup_excluded", "중복 제외 (과거 발송 이력)",
+     "과거에 이미 메일로 발송한 적이 있어 자동 제외된 영상. 매주 신선한 후보 보장을 위한 dedup."),
+    ("hard_excluded", "자동 필터 컷", "hard_filter_excluded", "자동 필터 컷 (Hard Filter)",
+     "조회수·길이·언어·채널·키워드 등 코드 자동 필터에서 제외된 영상. 각 항목에 제외 사유 표시."),
+    ("hard_passed", "Hard 통과", "total_after_filter", "Hard Filter 통과",
+     "자동 필터를 통과해 Claude 분석 대상으로 넘어간 후보. badge로 최종 발송/AI 컷/대기 여부 표시."),
+    ("soft_excluded", "AI 컷", "soft_filter_excluded", "AI 큐레이션 컷 (Soft Filter)",
+     "Hard는 통과했지만 Claude가 채널 톤과 어긋난다고 판정한 후보. 제외 사유 표시."),
+    ("final", "최종 발송", "final_count", "최종 발송 후보",
+     "큐레이션 최종 통과 — 메일로 발송된 후보. 각 영상별 6개 분석 필드 + 변형 주제 첨부."),
+]
+
+
+def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlist=None, report_lists=None):
+    """첨부 HTML 리포트 — 인터랙티브 (클릭 탭 + 단계별 리스트 + 검색).
+
+    standalone HTML 전용. JS 기반 인터랙션 — 이메일 본문(render_email_html)은 별도 static.
+    """
     soft_excluded = soft_excluded or []
     waitlist = waitlist or []
-    cards = "".join(_render_candidate_card(i, v) for i, v in enumerate(top, 1))
-    excluded_cards = "".join(_render_excluded_card(i, v) for i, v in enumerate(soft_excluded, 1))
-    waitlist_cards = "".join(_render_waitlist_card(i, v) for i, v in enumerate(waitlist, 1))
+    report_lists = report_lists or {}
     fetched = datetime.now(KST).strftime("%Y-%m-%d")
+
+    # ── 6개 단계 리스트 구성 ──
+    dedup = report_lists.get("dedup_excluded", [])
+    hard_excl = report_lists.get("hard_excluded", [])
+    hard_pass = report_lists.get("hard_passed", top)  # 구버전 fallback
+    stage_data = {
+        "collected": dedup + hard_excl + hard_pass,
+        "dedup_excluded": dedup,
+        "hard_excluded": hard_excl,
+        "hard_passed": hard_pass,
+        "soft_excluded": soft_excluded,
+        "final": top,
+    }
+
+    # ── stats 탭 카드 ──
+    stat_cards = []
+    for key, label, statkey, _t, _d in _STAGE_TABS:
+        n = meta.get(statkey, len(stage_data.get(key, [])))
+        primary = " primary" if key == "final" else ""
+        active = " active" if key == "final" else ""
+        stat_cards.append(
+            f'<button class="stat{primary}{active}" data-stage="{key}" type="button">'
+            f'<div class="stat-n">{n}</div><div class="stat-k">{label}</div></button>'
+        )
+
+    # ── 6개 패널 (more-btn은 리스트 아래) ──
+    panels = []
+    for key, label, statkey, ptitle, pdesc in _STAGE_TABS:
+        items = stage_data.get(key, [])
+        if not items:
+            body = ('<div class="stage-list"><div class="empty-state">'
+                    '<div class="big">—</div>해당 단계의 영상이 없습니다.</div></div>')
+        elif key == "final":
+            body = "".join(_render_candidate_card(i, v, _si_search_text(v))
+                           for i, v in enumerate(items, 1))
+        else:
+            rows = "".join(_render_si_row(i, v) for i, v in enumerate(items, 1))
+            body = f'<div class="stage-list">{rows}</div>'
+        hidden = "" if key == "final" else " is-hidden"
+        panels.append(
+            f'<div class="stage-panel{hidden}" data-stage="{key}">'
+            f'<div class="stage-panel-head"><h2>{esc_html(ptitle)}</h2>'
+            f'<span class="cnt">총 {len(items)}개</span></div>'
+            f'<p class="stage-panel-desc">{esc_html(pdesc)}</p>'
+            f'{body}'
+            f'<button class="more-btn is-hidden" type="button">더보기</button>'
+            f'</div>'
+        )
+
     return f"""<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>털어드림 · K-pop Shorts 소싱 리포트 {today_label}</title>
@@ -1225,27 +1543,9 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlis
     <h1>털어드림 채널<br><em>K-pop Shorts</em> 후보 분석</h1>
     <p class="lead">
       YouTube Data API v3 기반 메타데이터 전수 검증. <b>22개 검색어</b>로 수집한 후보를 분석합니다.
+      <span class="js-only"><b>상단 카드를 클릭</b>하면 각 단계별 영상 리스트를 볼 수 있습니다.</span>
+      <span class="nojs-only">전체 단계별 리스트·검색 기능은 PC 브라우저(또는 파일 다운로드 후 모바일 브라우저)에서 확인할 수 있습니다.</span>
     </p>
-    <div class="lead-rows">
-      <div class="lead-row">
-        <div class="lead-row-k">수집 범위</div>
-        <div class="lead-row-v">
-          <b>{CONFIG['LOOKBACK_DAYS_NEWEST_PRIMARY']//30}~{CONFIG['LOOKBACK_DAYS_OLDEST']//30}개월 전 사이</b>
-          영상 (묵힌 영상 우선)
-        </div>
-      </div>
-      <div class="lead-row">
-        <div class="lead-row-k">중복 제어</div>
-        <div class="lead-row-v">과거 발송 영상 자동 중복 제외 (history 기반)</div>
-      </div>
-      <div class="lead-row">
-        <div class="lead-row-k">필터 통과</div>
-        <div class="lead-row-v">
-          <b>조회수 {CONFIG['MIN_VIEWS']//10000:,}만~{CONFIG['MAX_VIEWS']//10000:,}만</b> ·
-          Shorts({CONFIG['MAX_DURATION_SEC']}초 이하) · 한국어 · Claude 큐레이션
-        </div>
-      </div>
-    </div>
     <p class="lead">
       → 이번 주 신규 <b style="color: var(--ink);">{len(top)}개</b> 확정.
     </p>
@@ -1253,110 +1553,178 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlis
       <span>Source<b>YouTube Data API</b></span>
       <span>Fetched<b>{fetched}</b></span>
       <span>Queries<b>{len(CONFIG['SEARCH_QUERIES'])}</b></span>
-      <span>Analyzed<b>{len(top)} / {len(top)}</b></span>
+      <span>Range<b>{esc_html(str(meta.get('lookback_days', '')))}</b></span>
     </div>
   </section>
 
-  <div class="stats">
-    <div class="stat"><div class="stat-n">{meta['total_collected']}</div><div class="stat-k">Candidates Collected</div></div>
-    <div class="stat"><div class="stat-n">{meta['total_after_filter']}</div><div class="stat-k">Hard Filter Passed</div></div>
-    <div class="stat primary"><div class="stat-n">{len(top)}</div><div class="stat-k">Final Candidates</div></div>
-    <div class="stat"><div class="stat-n">{meta.get('soft_filter_excluded', 0)}</div><div class="stat-k">Soft Filter Excluded</div></div>
-    <div class="stat"><div class="stat-n">{meta.get('hard_filter_excluded', 0)}</div><div class="stat-k">Hard Filter Excluded</div></div>
+  <details class="criteria-toggle">
+    <summary>필터 기준 보기 (Hard / Soft)</summary>
+    <div class="criteria">
+      <div class="criteria-col">
+        <div class="criteria-head">
+          <span class="criteria-tag hard">Hard</span>
+          <h3>자동 메타데이터 컷</h3>
+          <span class="meta">코드 규칙</span>
+        </div>
+        <ul class="criteria-list">
+          <li><b>조회수</b> {CONFIG['MIN_VIEWS']//10000:,}만 이상 ~ {CONFIG['MAX_VIEWS']//10000:,}만 미만</li>
+          <li><b>길이</b> Shorts 형식 ({CONFIG['MAX_DURATION_SEC']}초 이하)</li>
+          <li><b>언어</b> 한국어 제목 (한글 포함)</li>
+          <li><b>업로드 기간</b> {CONFIG['LOOKBACK_DAYS_NEWEST_PRIMARY']//30}개월 전 ~ {CONFIG['LOOKBACK_DAYS_OLDEST']//30}개월 전 사이 (묵힌 영상 우선, 부족 시 {CONFIG['LOOKBACK_DAYS_NEWEST_FALLBACK']//30}개월 전까지 자동 확장)</li>
+          <li><b>중복 제외</b> 과거 발송 영상 자동 dedup (history 기반)</li>
+          <li><b>채널 블록</b> {', '.join(sorted(CONFIG['CHANNEL_BLOCKLIST'])) or '(없음)'}</li>
+          <li><b>키워드 블록</b> {', '.join(f'<code>{esc_html(k)}</code>' for k in CONFIG['TITLE_KEYWORD_BLOCKLIST'])}</li>
+        </ul>
+      </div>
+      <div class="criteria-col">
+        <div class="criteria-head">
+          <span class="criteria-tag soft">Soft</span>
+          <h3>Claude 큐레이션 판정</h3>
+          <span class="meta">AI 분석</span>
+        </div>
+        <ul class="criteria-list">
+          <li><b>직캠/뮤비/무대 영상 그 자체</b> — 해설·비하인드가 아닌 본방 영상</li>
+          <li><b>시의성 강한 소재</b> — 가십·근황·열애설 등 일주일 내 휘발</li>
+          <li><b>무명/유튜버 중심</b> — 1군 아이돌이 주체가 아닌 콘텐츠</li>
+          <li><b>단순 짤·밈·웃긴 모음</b> — 분석 각도 없는 영상</li>
+          <li><b>자극·낚시 톤</b> — 분석/해설형이라는 채널 결과 어긋나는 콘텐츠</li>
+          <li style="color:var(--ink-light);font-size:11px;border-top:1px solid var(--border);margin-top:8px;padding-top:10px;"><b style="color:var(--ink-light);">출력</b> 후보별 6개 분석 필드 + 채택/탈락 + 사유</li>
+        </ul>
+      </div>
+    </div>
+  </details>
+
+  <div class="stats" id="statTabs">
+    {''.join(stat_cards)}
   </div>
 
-  <div class="criteria">
-    <div class="criteria-col">
-      <div class="criteria-head">
-        <span class="criteria-tag hard">Hard</span>
-        <h3>자동 메타데이터 컷</h3>
-        <span class="meta">코드 규칙</span>
-      </div>
-      <ul class="criteria-list">
-        <li><b>조회수</b> {CONFIG['MIN_VIEWS']//10000:,}만 이상 ~ {CONFIG['MAX_VIEWS']//10000:,}만 미만</li>
-        <li><b>길이</b> Shorts 형식 ({CONFIG['MAX_DURATION_SEC']}초 이하)</li>
-        <li><b>언어</b> 한국어 제목 (한글 포함)</li>
-        <li><b>업로드 기간</b> {CONFIG['LOOKBACK_DAYS_NEWEST_PRIMARY']//30}개월 전 ~ {CONFIG['LOOKBACK_DAYS_OLDEST']//30}개월 전 사이 (묵힌 영상 우선, 부족 시 {CONFIG['LOOKBACK_DAYS_NEWEST_FALLBACK']//30}개월 전까지 자동 확장)</li>
-        <li><b>중복 제외</b> 과거 발송 영상 자동 dedup (history 기반)</li>
-        <li><b>채널 블록</b> {', '.join(sorted(CONFIG['CHANNEL_BLOCKLIST'])) or '(없음)'}</li>
-        <li><b>키워드 블록</b> {', '.join(f'<code>{esc_html(k)}</code>' for k in CONFIG['TITLE_KEYWORD_BLOCKLIST'])}</li>
-      </ul>
-    </div>
-    <div class="criteria-col">
-      <div class="criteria-head">
-        <span class="criteria-tag soft">Soft</span>
-        <h3>Claude 큐레이션 판정</h3>
-        <span class="meta">AI 분석</span>
-      </div>
-      <ul class="criteria-list">
-        <li><b>직캠/뮤비/무대 영상 그 자체</b> — 해설·비하인드가 아닌 본방 영상</li>
-        <li><b>시의성 강한 소재</b> — 가십·근황·열애설 등 일주일 내 휘발</li>
-        <li><b>무명/유튜버 중심</b> — 1군 아이돌이 주체가 아닌 콘텐츠</li>
-        <li><b>단순 짤·밈·웃긴 모음</b> — 분석 각도 없는 영상</li>
-        <li><b>자극·낚시 톤</b> — 분석/해설형이라는 채널 결과 어긋나는 콘텐츠</li>
-        <li style="color:var(--ink-light);font-size:11px;border-top:1px solid var(--border);margin-top:8px;padding-top:10px;"><b style="color:var(--ink-light);">출력</b> 후보별 6개 분석 필드 + 채택/탈락 + 사유</li>
-      </ul>
-    </div>
+  <div class="search-bar">
+    <input type="text" id="searchInput" class="search-input"
+           placeholder="현재 선택한 리스트에서 제목·채널·키워드 검색" autocomplete="off">
+    <span class="search-count" id="searchCount"></span>
   </div>
 
-  <section class="section">
-    <div class="section-head">
-      <div class="left">
-        <span class="section-num">01 / FINAL</span>
-        <h2>최종 후보 {len(top)}선</h2>
-      </div>
-      <span class="section-tag">조회수순 · Claude 분석 첨부</span>
-    </div>
-    <p class="section-lead">
-      각 후보에 대해 소재 유형 / 제목 구조 / 시의성 / 채널 적합성 / 첫 3초 훅 / 털어드림식 변형 주제 6개 필드를
-      Claude가 메타데이터 기반으로 분석했습니다.
-    </p>
-    {cards}
-  </section>
-
-  {f'''
-  <section class="section">
-    <div class="section-head">
-      <div class="left">
-        <span class="section-num">02 / EXCLUDED</span>
-        <h2>Soft Filter 탈락 ({len(soft_excluded)}선)</h2>
-      </div>
-      <span class="section-tag">Claude 큐레이션 컷 · 제외 사유 표시</span>
-    </div>
-    <p class="section-lead">
-      Hard filter는 통과했지만 채널 톤(분석/해설형 비하인드)과 어긋난다고 Claude가 판정한 후보.
-      직캠/뮤비/단순 가십/낚시 위주 콘텐츠 등이 여기서 컷됩니다.
-    </p>
-    <div class="excluded-wrap">
-      {excluded_cards}
-    </div>
-  </section>
-  ''' if soft_excluded else ''}
-
-  {f'''
-  <section class="section">
-    <div class="section-head">
-      <div class="left">
-        <span class="section-num">03 / WAITLIST</span>
-        <h2>다음 주 후보 풀 ({len(waitlist)}개)</h2>
-      </div>
-      <span class="section-tag">보류 상태 · 다음 주 진입 가능</span>
-    </div>
-    <p class="section-lead">
-      이번 주 발송에는 못 들었지만 풀에 남아있는 후보들. 다음 주에 상위권 영상이
-      dedup으로 빠지거나 분석 풀에 진입하면 자연스럽게 final로 올라올 가능성이 있습니다.
-    </p>
-    <div class="waitlist-wrap">
-      {waitlist_cards}
-    </div>
-  </section>
-  ''' if waitlist else ''}
+  <div id="panelWrap">
+    {''.join(panels)}
+  </div>
 
   <div class="footer">
     <span>털어드림 · 자동 발송</span>
     <span>YouTube Data API v3 · Claude Opus 4.7 · {today_label} KST</span>
   </div>
-</div></body></html>"""
+</div>
+<script>
+(function() {{
+  // JS 작동 환경 표시 → CSS가 탭/검색 UI를 노출 (JS 없으면 최종 발송만 보임)
+  document.documentElement.classList.add('js');
+  var INITIAL = 30, STEP = 50;
+  var tabs = document.querySelectorAll('#statTabs .stat');
+  var panels = document.querySelectorAll('.stage-panel');
+  var searchInput = document.getElementById('searchInput');
+  var searchCount = document.getElementById('searchCount');
+  var shownLimit = {{}};  // stage -> 현재 표시 개수 한도
+
+  function activePanel() {{
+    for (var i = 0; i < panels.length; i++) {{
+      if (!panels[i].classList.contains('is-hidden')) return panels[i];
+    }}
+    return panels[0];
+  }}
+
+  function items(panel) {{
+    // 컴팩트 리스트는 .si, 최종 발송 패널은 .candidate
+    var nodes = panel.querySelectorAll('.si, .candidate');
+    return Array.prototype.slice.call(nodes);
+  }}
+
+  function render() {{
+    var panel = activePanel();
+    var stage = panel.getAttribute('data-stage');
+    var q = (searchInput.value || '').trim().toLowerCase();
+    var all = items(panel);
+    var matched = [];
+    for (var i = 0; i < all.length; i++) {{
+      var hay = all[i].getAttribute('data-search') || '';
+      if (!q || hay.indexOf(q) !== -1) matched.push(all[i]);
+    }}
+    var limit = q ? matched.length : (shownLimit[stage] || INITIAL);
+    var shownN = 0;
+    for (var j = 0; j < all.length; j++) all[j].classList.add('is-hidden');
+    for (var k = 0; k < matched.length && k < limit; k++) {{
+      matched[k].classList.remove('is-hidden');
+      shownN++;
+    }}
+    // 더보기 버튼
+    var moreBtn = panel.querySelector('.more-btn');
+    if (moreBtn) {{
+      if (!q && matched.length > shownN) {{
+        moreBtn.classList.remove('is-hidden');
+        moreBtn.textContent = '더보기 (' + (matched.length - shownN) + '개 남음)';
+      }} else {{
+        moreBtn.classList.add('is-hidden');
+      }}
+    }}
+    // 검색 카운트
+    if (q) {{
+      searchCount.innerHTML = (matched.length > 0)
+        ? ('전체 ' + all.length + '개 중 <b>' + matched.length + '개</b> 표시')
+        : ('<b>0개</b> — \\u2018' + q + '\\u2019 검색 결과 없음');
+    }} else {{
+      searchCount.innerHTML = '전체 <b>' + all.length + '개</b>';
+    }}
+    // empty-state (검색 결과 0)
+    var emptyMsg = panel.querySelector('.search-empty');
+    if (q && matched.length === 0) {{
+      if (!emptyMsg) {{
+        emptyMsg = document.createElement('div');
+        emptyMsg.className = 'search-empty empty-state';
+        emptyMsg.innerHTML = '<div class="big">\\uD83D\\uDD0D</div>현재 단계에서 \\u2018'
+          + q.replace(/</g,'&lt;') + '\\u2019 검색 결과가 없습니다.';
+        var list = panel.querySelector('.stage-list') || panel;
+        list.appendChild(emptyMsg);
+      }}
+    }} else if (emptyMsg) {{
+      emptyMsg.parentNode.removeChild(emptyMsg);
+    }}
+  }}
+
+  function switchTab(stage) {{
+    for (var i = 0; i < tabs.length; i++) {{
+      tabs[i].classList.toggle('active', tabs[i].getAttribute('data-stage') === stage);
+    }}
+    for (var j = 0; j < panels.length; j++) {{
+      panels[j].classList.toggle('is-hidden', panels[j].getAttribute('data-stage') !== stage);
+    }}
+    searchInput.value = '';  // 탭 전환 시 검색 초기화
+    render();
+  }}
+
+  for (var t = 0; t < tabs.length; t++) {{
+    (function(tab) {{
+      tab.addEventListener('click', function() {{
+        switchTab(tab.getAttribute('data-stage'));
+      }});
+    }})(tabs[t]);
+  }}
+
+  for (var p = 0; p < panels.length; p++) {{
+    (function(panel) {{
+      var moreBtn = panel.querySelector('.more-btn');
+      if (moreBtn) {{
+        moreBtn.addEventListener('click', function() {{
+          var stage = panel.getAttribute('data-stage');
+          shownLimit[stage] = (shownLimit[stage] || INITIAL) + STEP;
+          render();
+        }});
+      }}
+    }})(panels[p]);
+  }}
+
+  searchInput.addEventListener('input', render);
+  render();  // 초기 렌더 (final 탭)
+}})();
+</script>
+</body></html>"""
 
 
 def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None):
@@ -1395,11 +1763,12 @@ def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None)
 
     # ---- 5칸 stats를 table로 ----
     stats_cells = [
-        (str(meta['total_collected']), "Collected", False),
-        (str(meta['total_after_filter']), "Hard Pass", False),
-        (str(len(top)), "Final", True),  # primary (검정 배경 + 노란 숫자)
-        (str(meta.get('soft_filter_excluded', 0)), "Soft Excl", False),
-        (str(meta.get('hard_filter_excluded', 0)), "Hard Excl", False),
+        (str(meta['total_collected']), "수집", False),
+        (str(meta.get('dedup_excluded', 0)), "중복 제외", False),
+        (str(meta.get('hard_filter_excluded', 0)), "자동 컷", False),
+        (str(meta['total_after_filter']), "Hard 통과", False),
+        (str(meta.get('soft_filter_excluded', 0)), "AI 컷", False),
+        (str(len(top)), "최종 발송", True),  # primary (검정 배경 + 노란 숫자)
     ]
     stats_tds = []
     for n, k, primary in stats_cells:
@@ -1407,7 +1776,7 @@ def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None)
         n_color = "#f5c518" if primary else "#0a0a0a"
         k_color = "rgba(255,255,255,0.55)" if primary else "#888"
         stats_tds.append(f"""
-        <td width="20%" style="background:{bg};padding:18px 14px;text-align:left;font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;border-right:1px solid #e8e6e0;">
+        <td width="16.66%" style="background:{bg};padding:16px 12px;text-align:left;font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;border-right:1px solid #e8e6e0;">
           <div style="font-size:24px;font-weight:900;color:{n_color};letter-spacing:-0.02em;line-height:1;">{n}</div>
           <div style="font-size:10px;font-weight:600;color:{k_color};letter-spacing:0.04em;text-transform:uppercase;margin-top:6px;">{k}</div>
         </td>""")
@@ -1661,41 +2030,72 @@ def main():
     # 옵션: 오늘 history JSON이 이미 있으면 분석 스킵 (디버깅·메일 재발송용)
     # 강제 재분석: $env:FORCE_RESCAN="1" 또는 .env에 FORCE_RESCAN=1
     force_rescan = os.environ.get("FORCE_RESCAN", "").strip().lower() in ("1", "true", "yes")
+    # DRY_RUN: 메일 발송 안 함, history 미변경, preview HTML만 local_output에 저장
+    dry_run = os.environ.get("DRY_RUN", "").strip().lower() in ("1", "true", "yes")
+
+    report_data_path = LOCAL_OUTPUT_DIR / f"report_data_{date_slug}.json"
 
     print("=" * 60)
     print("털어드림 주간 후보 자동 수집 시작")
     print(f"실행 시각 (KST): {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"로그 파일: {log_path.relative_to(ROOT)}")
+    if dry_run:
+        print("⚠️  DRY_RUN 모드 — 메일 발송 안 함 / history 미변경")
     print("=" * 60)
 
     try:
+        bundle = None  # {top, meta, soft_excluded, waitlist, lookback_used, report_lists}
+
         # ============================================================
-        # RESUME 모드: 오늘자 history가 있으면 수집/분석 전부 스킵
+        # DRY_RUN 재렌더 캐시: 같은 날 report_data 캐시 있으면 파이프라인 스킵
         # ============================================================
-        if arc_path.exists() and not force_rescan:
+        if dry_run and report_data_path.exists() and not force_rescan:
+            print(f"\n[DRY_RUN] report_data 캐시 발견 → 파이프라인 스킵, HTML만 재생성")
+            print(f"  파일: {report_data_path.relative_to(ROOT)}")
+            print(f"  💡 새로 수집하려면: $env:FORCE_RESCAN=\"1\" 추가")
+            bundle = json.loads(report_data_path.read_text(encoding="utf-8"))
+            print(f"  로드: 최종 {len(bundle['top'])}개, "
+                  f"수집 {bundle['meta']['total_collected']}개")
+
+        # ============================================================
+        # RESUME 모드: 오늘자 history가 있으면 수집/분석 전부 스킵 (DRY_RUN 아닐 때)
+        # ============================================================
+        elif arc_path.exists() and not force_rescan and not dry_run:
             print(f"\n[RESUME] 오늘자 history 발견 → 수집·분석 스킵, 메일만 재발송")
             print(f"  파일: {arc_path.relative_to(ROOT)}")
             print(f"  💡 강제 재분석하려면: PowerShell에 $env:FORCE_RESCAN=\"1\" 후 실행")
             archive = json.loads(arc_path.read_text(encoding="utf-8"))
-            top = archive["candidates"]
-            meta = archive["stats"]
-            soft_excluded_list = archive.get("soft_excluded", [])
-            waitlist = archive.get("waitlist", [])
-            lookback_used = archive["config"]["lookback_days_used"]
-            print(f"  로드: {len(top)}개 후보, soft 탈락 {len(soft_excluded_list)}개, 보류 {len(waitlist)}개, {lookback_used} 기준")
+            cands = archive["candidates"]
+            bundle = {
+                "top": cands,
+                "meta": archive["stats"],
+                "soft_excluded": archive.get("soft_excluded", []),
+                "waitlist": archive.get("waitlist", []),
+                "lookback_used": archive["config"]["lookback_days_used"],
+                # 구버전 history엔 report_lists 없음 → 빈 리스트로 graceful degrade
+                "report_lists": archive.get("report_lists", {
+                    "dedup_excluded": [], "hard_excluded": [], "hard_passed": cands,
+                }),
+            }
+            print(f"  로드: 최종 {len(bundle['top'])}개, soft 탈락 "
+                  f"{len(bundle['soft_excluded'])}개, 보류 {len(bundle['waitlist'])}개")
+
+        # ============================================================
+        # 풀 파이프라인 — 수집 → 분석 → 큐레이션
+        # ============================================================
         else:
             if force_rescan and arc_path.exists():
                 print(f"\n[FORCE_RESCAN] 기존 history 무시하고 새로 분석합니다")
 
-            # 0. 과거 발송 영상 ID 로드 (중복 제외용). 오늘자 history는 skip.
-            seen_ids = load_seen_video_ids(skip_filename=arc_path.name)
-            print(f"\n[STEP 0] 과거 발송 영상: {len(seen_ids)}개 (중복 제외 풀)")
+            # 0. 과거 발송 영상 메타데이터 로드 (중복 제외용). 오늘자 history는 skip.
+            seen_meta = load_seen_video_meta(skip_filename=arc_path.name)
+            print(f"\n[STEP 0] 과거 발송 영상: {len(seen_meta)}개 (중복 제외 풀)")
 
             # 1. 주 검색 — 6개월 전 ~ 1년 전 사이 (묵힌 영상 우선)
             oldest = CONFIG["LOOKBACK_DAYS_OLDEST"]
             newest = CONFIG["LOOKBACK_DAYS_NEWEST_PRIMARY"]
             print(f"\n[STEP 1] {newest}일 전 ~ {oldest}일 전 사이 영상 수집")
-            result = collect(env["YOUTUBE_API_KEY"], oldest, newest, seen_ids=seen_ids)
+            result = collect(env["YOUTUBE_API_KEY"], oldest, newest, seen_meta=seen_meta)
             candidates = result["candidates"]
             lookback_used = f"{newest}~{oldest}일 전"
 
@@ -1704,7 +2104,7 @@ def main():
                 fallback_newest = CONFIG["LOOKBACK_DAYS_NEWEST_FALLBACK"]
                 print(f"\n[STEP 1b] hard pass 부족 ({len(candidates)} < {CONFIG['MIN_HARD_PASS']})"
                       f" → {fallback_newest}일 전까지 확장 재검색")
-                result = collect(env["YOUTUBE_API_KEY"], oldest, fallback_newest, seen_ids=seen_ids)
+                result = collect(env["YOUTUBE_API_KEY"], oldest, fallback_newest, seen_meta=seen_meta)
                 candidates = result["candidates"]
                 lookback_used = f"{fallback_newest}~{oldest}일 전 (fallback)"
 
@@ -1734,6 +2134,24 @@ def main():
             waitlist = waitlist_soft + waitlist_unanalyzed
             waitlist.sort(key=lambda x: -x["view_count"])
 
+            # 4.6. 각 hard-pass 후보에 최종 상태(status_label) 태깅 — 리포트 탭 표시용
+            final_ids = {c["video_id"] for c in top}
+            soft_ids = {c["video_id"] for c in soft_excluded_list}
+            wl_ids = {c["video_id"] for c in waitlist}
+            for c in candidates:
+                vid = c.get("video_id")
+                if vid in final_ids:
+                    c["status_label"] = "최종 발송"
+                elif vid in soft_ids:
+                    c["status_label"] = "AI 컷"
+                elif vid in wl_ids:
+                    c["status_label"] = "대기"
+                else:
+                    c["status_label"] = "미분석"
+            for c in soft_excluded_list:
+                c["exclusion_reason"] = c.get("analysis", {}).get("exclusion_reason", "")
+                c["status_label"] = "AI 컷"
+
             meta = {
                 "lookback_days": lookback_used,
                 "total_collected": result["total_collected"],
@@ -1750,7 +2168,52 @@ def main():
                   f"Hard pass {meta['total_after_filter']} (hard excl {meta['hard_filter_excluded']}) → "
                   f"Soft pass {len(soft_passed)} (soft excl {soft_excluded_count}) → Final {len(top)}")
 
-            # 5. history 아카이브 — 메일 발송보다 먼저! Claude 분석 결과 손실 방지
+            # 단계별 전체 리스트 (리포트 탭 렌더링용) — collected/final/soft는 JS에서 파생
+            report_lists = {
+                "dedup_excluded": result["dedup_list"],
+                "hard_excluded": result["hard_excluded"],
+                "hard_passed": candidates,
+            }
+            bundle = {
+                "top": top, "meta": meta, "soft_excluded": soft_excluded_list,
+                "waitlist": waitlist, "lookback_used": lookback_used,
+                "report_lists": report_lists,
+            }
+
+        # ── bundle 언팩 ──
+        top = bundle["top"]
+        meta = bundle["meta"]
+        soft_excluded_list = bundle["soft_excluded"]
+        waitlist = bundle["waitlist"]
+        lookback_used = bundle["lookback_used"]
+        report_lists = bundle["report_lists"]
+        attachment_filename = f"teoldeurim_{date_slug}.html"
+
+        # ============================================================
+        # DRY_RUN: 메일 발송 안 함, history 미변경, preview만 저장
+        # ============================================================
+        if dry_run:
+            LOCAL_OUTPUT_DIR.mkdir(exist_ok=True)
+            report_data_path.write_text(
+                json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8")
+            preview_path = LOCAL_OUTPUT_DIR / f"preview_{date_slug}.html"
+            preview_path.write_text(
+                render_standalone_report(top, meta, today_label,
+                                         soft_excluded_list, waitlist, report_lists),
+                encoding="utf-8")
+            print(f"\n[DRY_RUN] report_data 캐시 저장: {report_data_path.relative_to(ROOT)}")
+            print(f"[DRY_RUN] 미리보기 HTML 저장: {preview_path.relative_to(ROOT)}")
+            print(f"[DRY_RUN] ⚠️ 메일 발송 SKIP — 실제 수신자에게 발송 안 됨")
+            print(f"[DRY_RUN] ⚠️ history 파일 변경 SKIP — {arc_path.name} 그대로")
+            print("\n" + "=" * 60)
+            print(f"DRY_RUN 완료: 최종 {len(top)}개 (메일 미발송)")
+            print("=" * 60)
+            return
+
+        # ============================================================
+        # 일반 모드 — history 저장 (파이프라인 새로 돌렸을 때만) + 메일 발송
+        # ============================================================
+        if (not arc_path.exists()) or force_rescan:
             print(f"\n[STEP 5] history 아카이브")
             archive = {
                 "date_kst": date_slug,
@@ -1763,20 +2226,21 @@ def main():
                 },
                 "stats": meta,
                 "candidates": top,
+                "soft_excluded": soft_excluded_list,
+                "waitlist": waitlist,
+                "report_lists": report_lists,
             }
-            archive["soft_excluded"] = soft_excluded_list
-            archive["waitlist"] = waitlist
             arc_path.write_text(json.dumps(archive, ensure_ascii=False, indent=2), encoding="utf-8")
             print(f"  ✅ {arc_path.relative_to(ROOT)}")
 
-        # 4. 메일 발송 — 실패해도 위 history는 살아있음
+        # 메일 발송
         print(f"\n[STEP 4] 메일 발송 → {env['RECIPIENT_EMAIL']}")
-        attachment_filename = f"teoldeurim_{date_slug}.html"
         send_email(
             env,
             subject=f"[털어드림 주간 후보] {today_label} · 신규 {len(top)}개",
             html_body=render_email_html(top, meta, today_label, soft_excluded_list, waitlist),
-            attachment_html=render_standalone_report(top, meta, today_label, soft_excluded_list, waitlist),
+            attachment_html=render_standalone_report(top, meta, today_label,
+                                                     soft_excluded_list, waitlist, report_lists),
             attachment_filename=attachment_filename,
         )
         print(f"  ✅ 메일 발송 완료: {len(top)}개")
