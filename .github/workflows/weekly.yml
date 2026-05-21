@@ -20,7 +20,7 @@ concurrency:
 jobs:
   send-weekly-report:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20   # benchmark ~7분 + weekly ~3-5분 + 안전 마진
 
     permissions:
       contents: write   # history 파일 커밋 권한
@@ -42,6 +42,7 @@ jobs:
       # ============================================================
       # 시크릿 사전 검증 (이전 작업의 invalid x-api-key 함정 방지)
       # 키 길이만 출력. 실제 값은 마스킹돼 노출 안 됨.
+      # APIFY_TOKEN은 옵션 (benchmark용) — 별도 step에서 부드럽게 체크
       # ============================================================
       - name: 시크릿 사전 검증
         env:
@@ -75,6 +76,47 @@ jobs:
             exit 1
           fi
 
+      # ============================================================
+      # 보조 모듈: 타 채널 벤치마크 (Apify + Claude)
+      # - APIFY_TOKEN 없으면 step 자체 스킵 (weekly는 정상 진행)
+      # - 실행 실패해도 weekly 발송 막지 않음 (continue-on-error)
+      # - 산출물: benchmark/YYYY-MM-DD_report.html — weekly가 두 번째 첨부로 사용
+      # ============================================================
+      - name: Apify 토큰 존재 확인 (옵션)
+        id: apify_check
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: |
+          if [ -n "$APIFY_TOKEN" ]; then
+            echo "ok=1" >> "$GITHUB_OUTPUT"
+            echo "✅ APIFY_TOKEN 등록됨 — 벤치마크 step 실행"
+          else
+            echo "ok=" >> "$GITHUB_OUTPUT"
+            echo "⚠️ APIFY_TOKEN 미등록 — 벤치마크 step 스킵 (weekly는 정상 진행)"
+          fi
+
+      - name: 벤치마크 보조 리포트 실행
+        if: steps.apify_check.outputs.ok == '1'
+        continue-on-error: true   # 실패해도 weekly 발송 막지 않음
+        timeout-minutes: 12
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PYTHONUNBUFFERED: '1'
+        run: python scripts/benchmark.py
+
+      - name: 벤치마크 리포트 경로 탐색
+        id: find_benchmark
+        run: |
+          if compgen -G "benchmark/*_report.html" > /dev/null; then
+            report=$(ls -t benchmark/*_report.html | head -1)
+            echo "path=$report" >> "$GITHUB_OUTPUT"
+            echo "✅ benchmark report 발견 — weekly 두 번째 첨부 대상: $report"
+          else
+            echo "path=" >> "$GITHUB_OUTPUT"
+            echo "⚠️ benchmark report not attached — file missing (weekly는 정상 진행)"
+          fi
+
       - name: 주간 잡 실행
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
@@ -84,6 +126,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # workflow_dispatch에서 force_rescan=true 체크하면 1로 전달, 아니면 빈 값
           FORCE_RESCAN: ${{ github.event.inputs.force_rescan == 'true' && '1' || '' }}
+          # 벤치마크 step에서 찾은 HTML 경로 (없으면 빈 값 → weekly는 단일 첨부로 fallback)
+          BENCHMARK_REPORT_PATH: ${{ steps.find_benchmark.outputs.path }}
           PYTHONUNBUFFERED: '1'
         run: python scripts/weekly.py
 

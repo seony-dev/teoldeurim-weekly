@@ -1728,7 +1728,42 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlis
 </body></html>"""
 
 
-def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None):
+def _render_extra_attachment_intro_tr():
+    """첨부 2종(주간 + benchmark)일 때 메일 본문 최상단에 노출되는 안내 <tr>.
+
+    Gmail/Outlook 호환을 위해 모든 스타일을 inline으로 유지.
+    """
+    return """
+    <!-- 첨부 2종 안내 (benchmark report 동봉 시) -->
+    <tr><td style="padding:26px 28px 18px;border-bottom:1px solid #e8e6e0;
+        font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+        color:#0a0a0a;font-size:13px;line-height:1.75;">
+      <p style="margin:0 0 12px;">안녕하세요, 박서은입니다.</p>
+      <p style="margin:0 0 16px;">
+        털어드림 주간 후보 리포트와 타 채널 벤치마크 리포트 첨부하여 전달드립니다.
+      </p>
+      <div style="font-size:12px;line-height:1.75;color:#444;margin:0 0 16px;
+          padding:12px 14px;background:#faf9f6;border:1px solid #e8e6e0;border-radius:4px;">
+        <div style="margin-bottom:8px;">
+          <b style="color:#8b1e3f;">1. 주간 후보 리포트</b><br>
+          <span style="margin-left:14px;color:#444;">· 이번 주 실제 후보 확인용</span>
+        </div>
+        <div>
+          <b style="color:#8b1e3f;">2. 타 채널 벤치마크 리포트</b><br>
+          <span style="margin-left:14px;color:#444;">· 참고 채널의 소재, 훅, 기획 포인트 확인용</span>
+        </div>
+      </div>
+      <p style="margin:0 0 8px;">
+        내용 확인 후 문제 있거나 추가/수정이 필요한 부분이 있으면
+        편하게 말씀 부탁드리겠습니다.
+      </p>
+      <p style="margin:0;color:#666;">감사합니다.</p>
+    </td></tr>
+    """
+
+
+def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None,
+                      has_extra_attachment=False):
     """이메일 본문 — Gmail/Outlook 호환 (table 레이아웃 + inline 스타일).
 
     Gmail은 CSS Grid/Flex/변수를 무시하므로 모든 스타일을 inline으로,
@@ -1788,7 +1823,7 @@ def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None)
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f7f6f3;">
 <tr><td align="center" style="padding:32px 16px;">
   <table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0" style="max-width:640px;width:100%;background:#fff;border:1px solid #e8e6e0;border-radius:8px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;">
-
+    {_render_extra_attachment_intro_tr() if has_extra_attachment else ''}
     <!-- 헤더 -->
     <tr><td style="padding:32px 28px 24px;border-bottom:1px solid #e8e6e0;">
       <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:#8b1e3f;text-transform:uppercase;margin-bottom:12px;">
@@ -1867,7 +1902,7 @@ def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None)
     <tr><td style="padding:16px 28px 24px;border-top:1px solid #e8e6e0;background:#f6f5f3;">
       <div style="font-size:11px;color:#888;line-height:1.6;">
         자동 발송 · YouTube Data API v3 · Claude Opus 4.7<br>
-        {today_label} KST · 첨부 HTML로 전체 분석 보기
+        {today_label} KST · {'첨부 2종 — 주간 후보 분석 + 타 채널 벤치마크 리포트' if has_extra_attachment else '첨부 HTML로 전체 분석 보기'}
       </div>
     </td></tr>
 
@@ -1976,7 +2011,45 @@ def parse_recipients(value):
     return [p for p in parts if p and "@" in p]
 
 
-def send_email(env, subject, html_body, attachment_html, attachment_filename):
+def _load_extra_attachment():
+    """BENCHMARK_REPORT_PATH 환경변수로 받은 추가 첨부 파일을 안전하게 로드.
+
+    파일이 없거나 빈 값이거나 읽기 실패해도 weekly 발송은 막지 않는다 — None 반환.
+    benchmark 모듈은 weekly와 독립이고 이 함수는 단순 파일 로더 — benchmark 코드를
+    import하거나 동작에 영향을 주지 않는다.
+
+    반환: [(filename, content_str)] 형태 리스트 (현재는 최대 1개), 없으면 None
+    """
+    path_str = (os.environ.get("BENCHMARK_REPORT_PATH") or "").strip()
+    if not path_str:
+        # 정상 흐름 (benchmark 첨부 없음) — 로그 노이즈 없이 그냥 None
+        return None
+    p = Path(path_str)
+    if not p.exists() or not p.is_file():
+        print(f"⚠️ benchmark report not attached — file missing: {p}",
+              file=sys.stderr)
+        return None
+    try:
+        content = p.read_text(encoding="utf-8")
+    except Exception as e:
+        print(f"⚠️ benchmark report not attached — read failed: {e}",
+              file=sys.stderr)
+        return None
+    if not content.strip():
+        print(f"⚠️ benchmark report not attached — file is empty: {p}",
+              file=sys.stderr)
+        return None
+    return [(p.name, content)]
+
+
+def _build_email_message(env, subject, html_body,
+                         attachment_html, attachment_filename,
+                         extra_attachments=None):
+    """MIME 메시지 객체를 구성 (SMTP 발송은 안 함). 단위 테스트 가능하도록 분리.
+
+    extra_attachments: [(filename, content_str_or_bytes), ...] 또는 None
+    반환: (MIMEMultipart msg, recipients list)
+    """
     recipients = parse_recipients(env["RECIPIENT_EMAIL"])
     if not recipients:
         raise ValueError(f"RECIPIENT_EMAIL에 유효한 주소가 없습니다: {env['RECIPIENT_EMAIL']!r}")
@@ -1990,10 +2063,29 @@ def send_email(env, subject, html_body, attachment_html, attachment_filename):
     body.attach(MIMEText(html_body, "html", "utf-8"))
     msg.attach(body)
 
+    # 기본 첨부 (주간 후보 리포트)
     attach = MIMEApplication(attachment_html.encode("utf-8"), _subtype="html")
     attach.add_header("Content-Disposition", "attachment", filename=attachment_filename)
     msg.attach(attach)
 
+    # 추가 첨부 (선택 — benchmark 등). 실패해도 weekly 발송 자체는 막지 않도록
+    # 호출 전에 _load_extra_attachment() 단계에서 이미 필터링됨
+    if extra_attachments:
+        for fn, content in extra_attachments:
+            data = content.encode("utf-8") if isinstance(content, str) else content
+            ex = MIMEApplication(data, _subtype="html")
+            ex.add_header("Content-Disposition", "attachment", filename=fn)
+            msg.attach(ex)
+
+    return msg, recipients
+
+
+def send_email(env, subject, html_body, attachment_html, attachment_filename,
+               extra_attachments=None):
+    msg, recipients = _build_email_message(
+        env, subject, html_body, attachment_html, attachment_filename,
+        extra_attachments=extra_attachments,
+    )
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:
         s.login(env["GMAIL_ADDRESS"], env["GMAIL_APP_PASSWORD"])
         s.sendmail(env["GMAIL_ADDRESS"], recipients, msg.as_string())
@@ -2221,6 +2313,13 @@ def main():
         report_lists = bundle["report_lists"]
         attachment_filename = f"teoldeurim_{date_slug}.html"
 
+        # 추가 첨부 (선택): BENCHMARK_REPORT_PATH 환경변수로 지정된 경우만
+        # 파일 없거나 실패해도 weekly 발송 자체는 영향 X — None으로 fallback
+        extra_attachments = _load_extra_attachment()
+        if extra_attachments:
+            print(f"  📎 추가 첨부: {extra_attachments[0][0]} "
+                  f"({len(extra_attachments[0][1]):,} bytes)")
+
         # ============================================================
         # DRY_RUN: 메일 발송 안 함, history 미변경, preview만 저장
         # ============================================================
@@ -2233,8 +2332,21 @@ def main():
                 render_standalone_report(top, meta, today_label,
                                          soft_excluded_list, waitlist, report_lists),
                 encoding="utf-8")
+            # DRY_RUN에서도 본문 미리보기 (intro/footer 분기 확인용)
+            body_preview_path = LOCAL_OUTPUT_DIR / f"preview_email_body_{date_slug}.html"
+            body_preview_path.write_text(
+                render_email_html(top, meta, today_label,
+                                  soft_excluded_list, waitlist,
+                                  has_extra_attachment=bool(extra_attachments)),
+                encoding="utf-8")
             print(f"\n[DRY_RUN] report_data 캐시 저장: {report_data_path.relative_to(ROOT)}")
             print(f"[DRY_RUN] 미리보기 HTML 저장: {preview_path.relative_to(ROOT)}")
+            print(f"[DRY_RUN] 메일 본문 미리보기: {body_preview_path.relative_to(ROOT)}")
+            if extra_attachments:
+                # benchmark HTML도 local_output에 복사해 시각 확인 가능
+                extra_preview = LOCAL_OUTPUT_DIR / extra_attachments[0][0]
+                extra_preview.write_text(extra_attachments[0][1], encoding="utf-8")
+                print(f"[DRY_RUN] 추가 첨부 미리보기: {extra_preview.relative_to(ROOT)}")
             print(f"[DRY_RUN] ⚠️ 메일 발송 SKIP — 실제 수신자에게 발송 안 됨")
             print(f"[DRY_RUN] ⚠️ history 파일 변경 SKIP — {arc_path.name} 그대로")
             print("\n" + "=" * 60)
@@ -2271,12 +2383,16 @@ def main():
         send_email(
             env,
             subject=f"[털어드림 주간 후보] {today_label} · 신규 {len(top)}개",
-            html_body=render_email_html(top, meta, today_label, soft_excluded_list, waitlist),
+            html_body=render_email_html(top, meta, today_label,
+                                        soft_excluded_list, waitlist,
+                                        has_extra_attachment=bool(extra_attachments)),
             attachment_html=render_standalone_report(top, meta, today_label,
                                                      soft_excluded_list, waitlist, report_lists),
             attachment_filename=attachment_filename,
+            extra_attachments=extra_attachments,
         )
-        print(f"  ✅ 메일 발송 완료: {len(top)}개")
+        attach_n = 1 + (len(extra_attachments) if extra_attachments else 0)
+        print(f"  ✅ 메일 발송 완료: {len(top)}개 (첨부 {attach_n}종)")
 
         print("\n" + "=" * 60)
         print(f"완료: 최종 {len(top)}개 발송 ({lookback_used} 기준)")
