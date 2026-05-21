@@ -25,3 +25,7 @@ build_ppt/
 *.pdf
 *.html
 node_modules/
+
+# 벤치마크 산출물 (scripts/benchmark.py, config/ 등 소스는 추적, 산출물만 제외)
+benchmark/*.json
+# benchmark/*.html 은 위의 *.html 패턴으로 이미 무시됨
