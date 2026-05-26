@@ -41,11 +41,37 @@ jobs:
           pip install -r requirements.txt
 
       # ============================================================
+      # 격주 판별 — KST 금요일 기준 ISO 주차로 홀수/짝수 판단
+      # - 홀수 주차: 발송 (run=1)
+      # - 짝수 주차: 스킵 (run="")
+      # - 단, workflow_dispatch (수동 실행)은 항상 통과 (테스트·재발송용)
+      # ============================================================
+      - name: 격주 판별 (KST ISO 주차)
+        id: biweekly
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=1" >> "$GITHUB_OUTPUT"
+            echo "✅ 수동 실행 (workflow_dispatch) — 격주 스킵 무시하고 진행"
+          else
+            week=$(TZ=Asia/Seoul date +%V)
+            echo "현재 KST ISO 주차: $week"
+            # 10# prefix: leading zero를 8진수로 해석하는 사고 방지
+            if [ $((10#$week % 2)) -eq 1 ]; then
+              echo "run=1" >> "$GITHUB_OUTPUT"
+              echo "✅ 홀수 주차 ($week) — 격주 발송일"
+            else
+              echo "run=" >> "$GITHUB_OUTPUT"
+              echo "⏭️  짝수 주차 ($week) — 격주 스킵 (다음 주 발송)"
+            fi
+          fi
+
+      # ============================================================
       # 시크릿 사전 검증 (이전 작업의 invalid x-api-key 함정 방지)
       # 키 길이만 출력. 실제 값은 마스킹돼 노출 안 됨.
       # APIFY_TOKEN은 옵션 (benchmark용) — 별도 step에서 부드럽게 체크
       # ============================================================
       - name: 시크릿 사전 검증
+        if: steps.biweekly.outputs.run == '1'
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
@@ -84,6 +110,7 @@ jobs:
       # - 산출물: benchmark/YYYY-MM-DD_report.html — weekly가 두 번째 첨부로 사용
       # ============================================================
       - name: Apify 토큰 존재 확인 (옵션)
+        if: steps.biweekly.outputs.run == '1'
         id: apify_check
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
@@ -97,7 +124,7 @@ jobs:
           fi
 
       - name: 벤치마크 보조 리포트 실행
-        if: steps.apify_check.outputs.ok == '1'
+        if: steps.biweekly.outputs.run == '1' && steps.apify_check.outputs.ok == '1'
         continue-on-error: true   # 실패해도 weekly 발송 막지 않음
         timeout-minutes: 12
         env:
@@ -107,6 +134,7 @@ jobs:
         run: python scripts/benchmark.py
 
       - name: 벤치마크 리포트 경로 탐색
+        if: steps.biweekly.outputs.run == '1'
         id: find_benchmark
         run: |
           if compgen -G "benchmark/*_report.html" > /dev/null; then
@@ -119,6 +147,7 @@ jobs:
           fi
 
       - name: 주간 잡 실행
+        if: steps.biweekly.outputs.run == '1'
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
@@ -136,6 +165,7 @@ jobs:
       # history 파일이 새로 생성됐으면 자동 커밋
       # ============================================================
       - name: history 커밋
+        if: steps.biweekly.outputs.run == '1'
         run: |
           git config user.name "teoldeurim-bot"
           git config user.email "actions@github.com"

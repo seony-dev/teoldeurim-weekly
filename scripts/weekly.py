@@ -1740,13 +1740,13 @@ def _render_extra_attachment_intro_tr():
         color:#0a0a0a;font-size:13px;line-height:1.75;">
       <p style="margin:0 0 12px;">안녕하세요, 박서은입니다.</p>
       <p style="margin:0 0 16px;">
-        털어드림 주간 후보 리포트와 타 채널 벤치마크 리포트 첨부하여 전달드립니다.
+        털어드림 격주 후보 리포트와 타 채널 벤치마크 리포트 첨부하여 전달드립니다.
       </p>
       <div style="font-size:12px;line-height:1.75;color:#444;margin:0 0 16px;
           padding:12px 14px;background:#faf9f6;border:1px solid #e8e6e0;border-radius:4px;">
         <div style="margin-bottom:8px;">
-          <b style="color:#8b1e3f;">1. 주간 후보 리포트</b><br>
-          <span style="margin-left:14px;color:#444;">· 이번 주 실제 후보 확인용</span>
+          <b style="color:#8b1e3f;">1. 격주 후보 리포트</b><br>
+          <span style="margin-left:14px;color:#444;">· 이번 회차 실제 후보 확인용</span>
         </div>
         <div>
           <b style="color:#8b1e3f;">2. 타 채널 벤치마크 리포트</b><br>
@@ -1827,10 +1827,10 @@ def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None,
     <!-- 헤더 -->
     <tr><td style="padding:32px 28px 24px;border-bottom:1px solid #e8e6e0;">
       <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:#8b1e3f;text-transform:uppercase;margin-bottom:12px;">
-        Weekly Sourcing Report · {today_label}
+        Biweekly Sourcing Report · {today_label}
       </div>
       <h1 style="margin:0 0 14px;font-size:32px;font-weight:900;letter-spacing:-0.03em;color:#0a0a0a;line-height:1.1;">
-        털어드림 <span style="color:#8b1e3f;">주간 후보</span>
+        털어드림 <span style="color:#8b1e3f;">격주 후보</span>
       </h1>
       <p style="margin:0;font-size:13px;color:#666;line-height:1.7;">
         최근 <b style="color:#0a0a0a;">1년</b> 풀 · 과거 발송 자동 중복 제외 ·
@@ -1902,7 +1902,7 @@ def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None,
     <tr><td style="padding:16px 28px 24px;border-top:1px solid #e8e6e0;background:#f6f5f3;">
       <div style="font-size:11px;color:#888;line-height:1.6;">
         자동 발송 · YouTube Data API v3 · Claude Opus 4.7<br>
-        {today_label} KST · {'첨부 2종 — 주간 후보 분석 + 타 채널 벤치마크 리포트' if has_extra_attachment else '첨부 HTML로 전체 분석 보기'}
+        {today_label} KST · {'첨부 2종 — 격주 후보 분석 + 타 채널 벤치마크 리포트' if has_extra_attachment else '첨부 HTML로 전체 분석 보기'}
       </div>
     </td></tr>
 
@@ -2382,7 +2382,7 @@ def main():
         print(f"\n[STEP 4] 메일 발송 → {env['RECIPIENT_EMAIL']}")
         send_email(
             env,
-            subject=f"[털어드림 주간 후보] {today_label} · 신규 {len(top)}개",
+            subject=f"[털어드림 격주 후보] {today_label} · 신규 {len(top)}개",
             html_body=render_email_html(top, meta, today_label,
                                         soft_excluded_list, waitlist,
                                         has_extra_attachment=bool(extra_attachments)),
