@@ -34,13 +34,14 @@ import anthropic
 # 설정
 # ============================================================================
 CONFIG = {
-    "MIN_VIEWS": 1_000_000,           # 100만 이상
+    "MIN_VIEWS": 500_000,           # 100만 이상 → 50만 이상 (26.07.13 변경)
     "MAX_VIEWS": 5_000_000,           # 500만 미만
     "MAX_DURATION_SEC": 180,
-    # 검색 기간: "6개월 전 ~ 1년 전 사이" 영상만. 풀 부족 시 3개월 전까지 자동 확장.
+    # 검색 기간: "업로드 직후 ~ 1년 이내" 영상 (26.07.13 변경).
+    # PRIMARY=FALLBACK=0이라 fallback 로직은 실질 no-op (코드는 유지 — 향후 정책 변경 시 값만 조정)
     "LOOKBACK_DAYS_OLDEST": 365,             # 가장 오래된 한계 (1년 전)
-    "LOOKBACK_DAYS_NEWEST_PRIMARY": 180,     # 가장 최근 한계 (6개월 전) — 기본
-    "LOOKBACK_DAYS_NEWEST_FALLBACK": 90,     # 가장 최근 한계 (3개월 전) — fallback
+    "LOOKBACK_DAYS_NEWEST_PRIMARY": 0,       # 가장 최근 한계 (오늘까지 = 업로드 직후 포함)
+    "LOOKBACK_DAYS_NEWEST_FALLBACK": 0,      # primary와 동일 — fallback 실질 무효
     "MIN_HARD_PASS": 25,                     # hard pass 미만이면 fallback 발동
     "MAX_ANALYSIS_CANDIDATES": 30,           # Claude 분석 비용 상한 (조회수 상위 N개만 분석)
     "TARGET_CANDIDATES": 20,                 # 최종 메일에 노출할 개수
@@ -348,7 +349,7 @@ def hard_filter_reason(row):
 def collect(api_key, days_oldest, days_newest, seen_meta=None):
     """특정 기간 풀에서 영상 수집 + 하드 필터 + 중복 제외.
 
-    days_oldest/days_newest: 검색 기간 한계 (예: 180~365 → 6개월~1년 전 사이)
+    days_oldest/days_newest: 검색 기간 한계 (예: 0~365 → 업로드 직후 ~ 1년 이내)
     seen_meta: 과거 발송 영상 {video_id: 메타데이터} 딕셔너리.
 
     반환: candidates(하드 통과) + hard_excluded(하드 탈락, 사유 포함) +
@@ -1571,7 +1572,7 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlis
           <li><b>조회수</b> {CONFIG['MIN_VIEWS']//10000:,}만 이상 ~ {CONFIG['MAX_VIEWS']//10000:,}만 미만</li>
           <li><b>길이</b> Shorts 형식 ({CONFIG['MAX_DURATION_SEC']}초 이하)</li>
           <li><b>언어</b> 한국어 제목 (한글 포함)</li>
-          <li><b>업로드 기간</b> {CONFIG['LOOKBACK_DAYS_NEWEST_PRIMARY']//30}개월 전 ~ {CONFIG['LOOKBACK_DAYS_OLDEST']//30}개월 전 사이 (묵힌 영상 우선, 부족 시 {CONFIG['LOOKBACK_DAYS_NEWEST_FALLBACK']//30}개월 전까지 자동 확장)</li>
+          <li><b>업로드 기간</b> {CONFIG['LOOKBACK_DAYS_OLDEST']//30}개월 이내 (업로드 직후 ~ 1년 전)</li>
           <li><b>중복 제외</b> 과거 발송 영상 자동 dedup (history 기반)</li>
           <li><b>채널 블록</b> {', '.join(sorted(CONFIG['CHANNEL_BLOCKLIST'])) or '(없음)'}</li>
           <li><b>키워드 블록</b> {', '.join(f'<code>{esc_html(k)}</code>' for k in CONFIG['TITLE_KEYWORD_BLOCKLIST'])}</li>
@@ -1860,7 +1861,7 @@ def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None,
               조회수 <b>{CONFIG['MIN_VIEWS']//10000:,}만~{CONFIG['MAX_VIEWS']//10000:,}만</b> ·
               Shorts(<b>{CONFIG['MAX_DURATION_SEC']}초</b>) ·
               한국어 ·
-              <b>{CONFIG['LOOKBACK_DAYS_NEWEST_PRIMARY']//30}~{CONFIG['LOOKBACK_DAYS_OLDEST']//30}개월 전</b> 사이 영상 (묵힌 영상 우선) ·
+              <b>{CONFIG['LOOKBACK_DAYS_OLDEST']//30}개월 이내</b> 영상 (업로드 직후 포함) ·
               과거 발송 자동 중복 제외 ·
               직캠/풀캠/열애설/뮤비 메이킹 등 키워드 차단
             </div>
@@ -2215,7 +2216,7 @@ def main():
             seen_meta = load_seen_video_meta(skip_filename=arc_path.name)
             print(f"\n[STEP 0] 과거 발송 영상: {len(seen_meta)}개 (중복 제외 풀)")
 
-            # 1. 주 검색 — 6개월 전 ~ 1년 전 사이 (묵힌 영상 우선)
+            # 1. 주 검색 — 업로드 직후 ~ 1년 이내 (26.07.13 정책 변경)
             oldest = CONFIG["LOOKBACK_DAYS_OLDEST"]
             newest = CONFIG["LOOKBACK_DAYS_NEWEST_PRIMARY"]
             print(f"\n[STEP 1] {newest}일 전 ~ {oldest}일 전 사이 영상 수집")
@@ -2223,7 +2224,7 @@ def main():
             candidates = result["candidates"]
             lookback_used = f"{newest}~{oldest}일 전"
 
-            # 1.5. Hard pass 부족 시 fallback — 3개월 전 ~ 1년 전으로 확장
+            # 1.5. Hard pass 부족 시 fallback (현재 primary=fallback=0이라 실질 no-op — 정책 변경 시 값만 조정)
             if len(candidates) < CONFIG["MIN_HARD_PASS"]:
                 fallback_newest = CONFIG["LOOKBACK_DAYS_NEWEST_FALLBACK"]
                 print(f"\n[STEP 1b] hard pass 부족 ({len(candidates)} < {CONFIG['MIN_HARD_PASS']})"
