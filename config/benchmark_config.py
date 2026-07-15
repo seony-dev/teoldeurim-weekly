@@ -24,6 +24,8 @@ BENCHMARK_CONFIG = {
         # 형식: {"name": "라벨", "channel": "username 또는 채널 URL"}
         {"name": "패션탐정냥", "channel": "https://www.youtube.com/@tamjeongcat"},
         {"name": "덕칼럼", "channel": "https://www.youtube.com/channel/UC0l_Io9P2rTbM82PoC9Bi4w"},
+        {"name": "이센느", "channel": "https://www.youtube.com/@이센느"},
+        {"name": "리센느서치P", "channel": "https://www.youtube.com/@리센느서치P"},
     ],
 
     # ========================================================================
@@ -85,11 +87,16 @@ BENCHMARK_CONFIG = {
     # ========================================================================
     # Hard 필터 — 수집 후 로컬에서 적용 (Claude 분석 전 1차 컷)
     # ========================================================================
-    "MIN_VIEWS": 100_000,           # [테스트값] 운영 권장 1_000_000 (100만)
-    "MAX_VIEWS": 4_000_000,         # 조회수 상한 — 대표님 요청
+    "MIN_VIEWS": 500_000,           # [테스트값] 운영 권장 100_000 (10만) → 50만으로 상향 (26.07.14)
+    "MAX_VIEWS": 9_000_000,         # 조회수 상한 400만 → 900만으로 상향 (26.07.14)
                                     # (초대형 조회수 영상은 너무 뻔해서 후보 제외)
                                     # MAX_TOTAL_RAW 컷 이전에 적용됨 (4M 이하 후보 확보)
     "MAX_DURATION_SEC": 180,        # Shorts 형식
+    # 업로드 age 필터 — timestamp 기준 (초 단위 정확도). 정수 days_since_upload는 리포트 표시용.
+    #   MIN_AGE_DAYS_EXCLUSIVE: age > N (strict, exclusive lower bound). None이면 하한 없음.
+    #   UPLOADED_WITHIN_DAYS: age <= N (inclusive upper bound). None이면 상한 없음.
+    # standard의 30일 초과~365일 이내를 정확히 표현. 정확히 30일 = recent 소속 (여기서 컷됨).
+    "MIN_AGE_DAYS_EXCLUSIVE": 30,   # standard: 30일 이하 컷 (30 자체 포함해서 컷)
     "UPLOADED_WITHIN_DAYS": 365,    # 1년 이내 업로드만 (너무 오래된 영상 제외)
 
     # ========================================================================
@@ -99,3 +106,70 @@ BENCHMARK_CONFIG = {
     "MAX_ANALYSIS_CANDIDATES": 10,  # [테스트값] 운영 권장 30 — Claude 분석 비용 상한
     "FINAL_CANDIDATES": 5,          # [테스트값] 운영 권장 15 — 리포트 노출 후보 수
 }
+
+
+# ============================================================================
+# 프로파일 — 프로파일별로 override 되는 필드만 명시.
+# 나머지 필드(REFERENCE_CHANNELS, EXCLUDE_*, ANALYSIS_MODEL 등)는
+# BENCHMARK_CONFIG에서 상속.
+# ----------------------------------------------------------------------------
+# PROFILE 환경변수가 지정되지 않으면 "standard" 사용 (기존 격주 금요일 동작).
+#
+# ⚠️ standard 프로파일의 값은 반드시 위 BENCHMARK_CONFIG의 현재 값과 동일해야 함
+#     (backward compat — 기존 실행 결과가 프로파일 도입으로 달라지면 안 됨).
+# ============================================================================
+BENCHMARK_PROFILES = {
+    # 격주 금요일 — 30일 초과 ~ 365일 이내
+    "standard": {
+        "SORT_BY": "POPULAR",
+        "MAX_SHORTS_PER_CHANNEL": 50,
+        "MAX_TOTAL_RAW": 30,
+        "MIN_VIEWS": 500_000,
+        "MAX_VIEWS": 9_000_000,
+        "MAX_DURATION_SEC": 180,
+        "MIN_AGE_DAYS_EXCLUSIVE": 30,     # 30일 이하는 recent 소속 → 여기서 컷
+        "UPLOADED_WITHIN_DAYS": 365,      # 365일 초과 컷
+        "MAX_ANALYSIS_CANDIDATES": 10,
+        "FINAL_CANDIDATES": 5,
+    },
+    # 매주 월요일 — 최근 콘텐츠 발굴 (0일 ~ 30일)
+    "recent": {
+        "SORT_BY": "NEWEST",
+        "MAX_SHORTS_PER_CHANNEL": 50,
+        "MAX_TOTAL_RAW": 30,
+        "MIN_VIEWS": 100_000,
+        "MAX_VIEWS": 1_000_000,
+        "MAX_DURATION_SEC": 180,
+        # 업로드 age 범위: 0일 ≤ age ≤ 30일. 정확히 30일 timestamp도 여기 포함.
+        "MIN_AGE_DAYS_EXCLUSIVE": None,   # 하한 없음 (업로드 당일 포함)
+        "UPLOADED_WITHIN_DAYS": 30,       # 30일 초과 컷
+        # 2026-07-14 실측: 조회수 통과 128개 중 이센느 첫 영상이 #11.
+        # standard(10)와 달리 recent는 채널당 최상위 조회수가 상대적으로 낮게 분산돼
+        # top 10 만으로는 특정 채널만 몰림 → 15로 조정해 채널 다양성 확보.
+        # (채널당 쿼터·라운드 로빈·점수 보정 없이 조회수 순 정렬 그대로 유지)
+        "MAX_ANALYSIS_CANDIDATES": 15,
+        "FINAL_CANDIDATES": 5,
+    },
+}
+
+
+# benchmark 공용 sent history — recent/standard 모두 여기 기록·참조
+BENCHMARK_SENT_HISTORY_DIR = "benchmark/history/sent"
+
+
+def resolve_config(profile="standard"):
+    """지정된 profile을 BENCHMARK_CONFIG에 병합해 반환. in-place 수정 안 함.
+
+    사용:
+        cfg = resolve_config(os.environ.get("PROFILE") or "standard")
+        cfg["MIN_VIEWS"]   # 프로파일별 override 반영된 값
+    """
+    if profile not in BENCHMARK_PROFILES:
+        raise ValueError(
+            f"Unknown PROFILE={profile!r}. "
+            f"Available: {sorted(BENCHMARK_PROFILES.keys())}"
+        )
+    merged = dict(BENCHMARK_CONFIG)
+    merged.update(BENCHMARK_PROFILES[profile])
+    merged["_PROFILE"] = profile
+    return merged

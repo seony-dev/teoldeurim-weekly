@@ -1,11 +1,11 @@
-name: 털어드림 주간 후보 메일링
+name: 털어드림 격주 통합 리포트 (금요일)
 
 # 매주 금요일 08:42 KST = 매주 목요일 23:42 UTC
-# (GitHub Actions schedule이 정각·10분 단위에서 시작 지연 큼 → 회피용 오프셋)
+# ISO 홀수 주차에서만 실행 (격주)
+# → send_report.py --mode=friday 가 benchmark → weekly → 통합 shell → 발송 전체를 관장.
 on:
   schedule:
-    - cron: '42 23 * * 4'   # 분 시 일 월 요일 (UTC 기준, 4=목요일)
-  # 수동 실행 (Actions 탭에서 "Run workflow" 버튼)
+    - cron: '42 23 * * 4'   # 목요일 23:42 UTC = 금요일 08:42 KST
   workflow_dispatch:
     inputs:
       force_rescan:
@@ -13,18 +13,18 @@ on:
         type: boolean
         default: false
 
-# 동시 실행 방지 (같은 시각 재실행 방지)
+# 동시 실행 방지
 concurrency:
   group: weekly-mailer
   cancel-in-progress: false
 
 jobs:
-  send-weekly-report:
+  send-friday-integrated:
     runs-on: ubuntu-latest
-    timeout-minutes: 20   # benchmark ~7분 + weekly ~3-5분 + 안전 마진
+    timeout-minutes: 25   # benchmark ~7분 + weekly ~4분 + shell 조립·발송 ~1분 + 안전 마진
 
     permissions:
-      contents: write   # history 파일 커밋 권한
+      contents: write   # history/, benchmark/history/sent/ 커밋 권한
 
     steps:
       - name: 레포 체크아웃
@@ -44,7 +44,7 @@ jobs:
       # 격주 판별 — KST 금요일 기준 ISO 주차로 홀수/짝수 판단
       # - 홀수 주차: 발송 (run=1)
       # - 짝수 주차: 스킵 (run="")
-      # - 단, workflow_dispatch (수동 실행)은 항상 통과 (테스트·재발송용)
+      # - 단, workflow_dispatch (수동 실행)은 항상 통과
       # ============================================================
       - name: 격주 판별 (KST ISO 주차)
         id: biweekly
@@ -55,7 +55,6 @@ jobs:
           else
             week=$(TZ=Asia/Seoul date +%V)
             echo "현재 KST ISO 주차: $week"
-            # 10# prefix: leading zero를 8진수로 해석하는 사고 방지
             if [ $((10#$week % 2)) -eq 1 ]; then
               echo "run=1" >> "$GITHUB_OUTPUT"
               echo "✅ 홀수 주차 ($week) — 격주 발송일"
@@ -66,115 +65,77 @@ jobs:
           fi
 
       # ============================================================
-      # 시크릿 사전 검증 (이전 작업의 invalid x-api-key 함정 방지)
-      # 키 길이만 출력. 실제 값은 마스킹돼 노출 안 됨.
-      # APIFY_TOKEN은 옵션 (benchmark용) — 별도 step에서 부드럽게 체크
+      # 시크릿 사전 검증
       # ============================================================
       - name: 시크릿 사전 검증
         if: steps.biweekly.outputs.run == '1'
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           set -e
           fail=0
           check() {
-            local name="$1" len="$2"
-            if [ "$len" -eq 0 ]; then
-              echo "❌ $name: 등록 안 됨 또는 빈 값"
-              fail=1
-            else
-              echo "✅ $name: 등록됨 (길이 $len)"
-            fi
+            if [ "$2" -eq 0 ]; then echo "❌ $1: 등록 안 됨"; fail=1
+            else echo "✅ $1: 등록됨 (길이 $2)"; fi
           }
           check YOUTUBE_API_KEY ${#YOUTUBE_API_KEY}
+          check APIFY_TOKEN ${#APIFY_TOKEN}
+          check ANTHROPIC_API_KEY ${#ANTHROPIC_API_KEY}
           check GMAIL_ADDRESS ${#GMAIL_ADDRESS}
           check GMAIL_APP_PASSWORD ${#GMAIL_APP_PASSWORD}
           check RECIPIENT_EMAIL ${#RECIPIENT_EMAIL}
-          check ANTHROPIC_API_KEY ${#ANTHROPIC_API_KEY}
           if [ $fail -eq 1 ]; then
             echo ""
             echo "👉 GitHub 레포의 Settings → Secrets and variables → Actions"
-            echo "   에서 위 5개 시크릿이 정확한 이름으로 등록됐는지 확인하세요."
-            echo "   (이름은 대소문자·언더스코어까지 정확히 일치해야 합니다)"
+            echo "   에서 위 6개 시크릿이 정확한 이름으로 등록됐는지 확인하세요."
             exit 1
           fi
 
       # ============================================================
-      # 보조 모듈: 타 채널 벤치마크 (Apify + Claude)
-      # - APIFY_TOKEN 없으면 step 자체 스킵 (weekly는 정상 진행)
-      # - 실행 실패해도 weekly 발송 막지 않음 (continue-on-error)
-      # - 산출물: benchmark/YYYY-MM-DD_report.html — weekly가 두 번째 첨부로 사용
+      # orchestrator 실행 (mode=friday)
+      # → 내부에서 benchmark(먼저) + weekly 순서로 subprocess 실행
+      #   weekly.py는 SEND_EMAIL_DISABLED=1 상태로 실행되므로 자체 발송 없음
+      #   history/YYYY-MM-DD.json은 weekly.py가 정상 저장 (기존 정책 유지)
+      # → 발송 성공 후:
+      #     · benchmark/history/sent/YYYY-MM-DD_standard.json 자동 생성
       # ============================================================
-      - name: Apify 토큰 존재 확인 (옵션)
-        if: steps.biweekly.outputs.run == '1'
-        id: apify_check
-        env:
-          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-        run: |
-          if [ -n "$APIFY_TOKEN" ]; then
-            echo "ok=1" >> "$GITHUB_OUTPUT"
-            echo "✅ APIFY_TOKEN 등록됨 — 벤치마크 step 실행"
-          else
-            echo "ok=" >> "$GITHUB_OUTPUT"
-            echo "⚠️ APIFY_TOKEN 미등록 — 벤치마크 step 스킵 (weekly는 정상 진행)"
-          fi
-
-      - name: 벤치마크 보조 리포트 실행
-        if: steps.biweekly.outputs.run == '1' && steps.apify_check.outputs.ok == '1'
-        continue-on-error: true   # 실패해도 weekly 발송 막지 않음
-        timeout-minutes: 12
-        env:
-          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          PYTHONUNBUFFERED: '1'
-        run: python scripts/benchmark.py
-
-      - name: 벤치마크 리포트 경로 탐색
-        if: steps.biweekly.outputs.run == '1'
-        id: find_benchmark
-        run: |
-          if compgen -G "benchmark/*_report.html" > /dev/null; then
-            report=$(ls -t benchmark/*_report.html | head -1)
-            echo "path=$report" >> "$GITHUB_OUTPUT"
-            echo "✅ benchmark report 발견 — weekly 두 번째 첨부 대상: $report"
-          else
-            echo "path=" >> "$GITHUB_OUTPUT"
-            echo "⚠️ benchmark report not attached — file missing (weekly는 정상 진행)"
-          fi
-
-      - name: 주간 잡 실행
+      - name: 오케스트레이터 실행 (mode=friday)
         if: steps.biweekly.outputs.run == '1'
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          # workflow_dispatch에서 force_rescan=true 체크하면 1로 전달, 아니면 빈 값
           FORCE_RESCAN: ${{ github.event.inputs.force_rescan == 'true' && '1' || '' }}
-          # 벤치마크 step에서 찾은 HTML 경로 (없으면 빈 값 → weekly는 단일 첨부로 fallback)
-          BENCHMARK_REPORT_PATH: ${{ steps.find_benchmark.outputs.path }}
           PYTHONUNBUFFERED: '1'
-        run: python scripts/weekly.py
+        run: python scripts/send_report.py --mode=friday
 
       # ============================================================
-      # history 파일이 새로 생성됐으면 자동 커밋
+      # history 커밋 (weekly + benchmark 공용 sent history)
+      # → weekly history: weekly.py가 매 실행 저장하므로 신규 파일이 있으면 add
+      # → benchmark sent history: 발송 성공한 경우에만 send_report.py가 생성
       # ============================================================
       - name: history 커밋
         if: steps.biweekly.outputs.run == '1'
         run: |
           git config user.name "teoldeurim-bot"
           git config user.email "actions@github.com"
+          # monday_recent 등 다른 workflow가 push한 커밋을 먼저 반영 (race 방지)
+          git pull --rebase --autostash
           git add history/
+          git add benchmark/history/sent/ 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "신규 history 파일 없음 (커밋 생략)"
           else
             today=$(TZ=Asia/Seoul date +%Y-%m-%d)
-            git commit -m "history: ${today} 주간 후보 아카이브"
+            git commit -m "history: ${today} 격주 통합 리포트 (weekly + benchmark)"
             git push
             echo "✅ 커밋 완료"
           fi

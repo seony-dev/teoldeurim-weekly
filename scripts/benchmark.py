@@ -54,7 +54,10 @@ HISTORY_DIR = ROOT / "history"  # weekly.py 산출물 — 읽기 전용으로만
 sys.path.insert(0, str(ROOT / "config"))
 import benchmark_config  # noqa: E402
 
-CFG = benchmark_config.BENCHMARK_CONFIG
+# CFG는 프로파일 미확정 상태의 기본값(=standard 필드가 이미 포함된 BENCHMARK_CONFIG).
+# main() 시작 시 PROFILE env 기준으로 resolve_config() 결과를 CFG에 병합함.
+# 임포트 시점의 backward compat: 프로파일 지정 없는 실행도 standard와 동일값.
+CFG = dict(benchmark_config.BENCHMARK_CONFIG)
 
 
 # ============================================================================
@@ -132,10 +135,46 @@ def parse_duration(v):
 
 
 def parse_date(v):
-    """ISO 날짜 문자열을 UTC datetime으로. 실패 시 None."""
+    """ISO 날짜 문자열을 UTC datetime으로. 실패 시 None.
+
+    ⚠️ date-only 파싱 (시간 부분 무시) — 리포트의 days_since_upload 표시용 유지.
+    기간 경계 필터에는 사용하지 않는다. 정확한 timestamp가 필요하면 parse_timestamp() 사용.
+    """
     if not v:
         return None
     s = str(v).strip()
+    m = re.match(r"(\d{4})-(\d{1,2})-(\d{1,2})", s)
+    if m:
+        try:
+            return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                            tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
+def parse_timestamp(v):
+    """ISO 8601 timestamp → aware UTC datetime. 실패 시 None.
+
+    지원 형식:
+      - Weekly (YouTube API):     "2026-06-25T11:01:33Z"
+      - Benchmark (Apify):        "2026-06-09T07:00:21.000Z"
+      - date-only fallback:       "2026-06-09"  (parse_date와 동일)
+
+    기간 경계 필터의 source of truth. 정수 days_since_upload는 리포트 표시용.
+    반환값은 항상 tzinfo=UTC aware.
+    """
+    if not v:
+        return None
+    s = str(v).strip().replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError:
+        pass
+    # date-only fallback (레거시 데이터)
     m = re.match(r"(\d{4})-(\d{1,2})-(\d{1,2})", s)
     if m:
         try:
@@ -389,6 +428,32 @@ def load_history_records():
     return weeks, sent_ids
 
 
+def load_benchmark_sent_history():
+    """benchmark/history/sent/*.json을 읽어 이전 benchmark 리포트(recent/standard)에서
+    발송된 영상 id 집합을 반환.
+
+    orchestrator(send_report.py)가 실제 메일 발송 성공 후에만 이 디렉터리에 파일을 쓴다.
+    → 발송 실패한 실행의 후보는 여기 없음 → 다음 실행에서 정상적으로 다시 후보로 검토됨.
+
+    weekly history와 완전 분리 — 이 함수는 weekly history를 참조하지 않음.
+    weekly history의 sent_ids는 별도로 load_history_records()가 담당.
+    """
+    result = set()
+    root_dir = ROOT / benchmark_config.BENCHMARK_SENT_HISTORY_DIR
+    if not root_dir.exists():
+        return result
+    for f in sorted(root_dir.glob("*.json")):
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"  ⚠️ benchmark sent history 읽기 실패 {f.name}: {e}")
+            continue
+        for vid in (d.get("candidates_video_ids") or []):
+            if vid:
+                result.add(vid)
+    return result
+
+
 def _accumulate_channel(scores, item, weight, week_file):
     """channel_id 기준으로 채널 점수를 누적."""
     cid = (item.get("channel_id") or "").strip()
@@ -556,10 +621,20 @@ def filter_excluded_channels(videos):
 # Hard 필터 / 지표 계산
 # ============================================================================
 def hard_filter(videos, now):
-    """조회수 / 길이 / 업로드 기간 기준 1차 컷."""
+    """조회수 / 길이 / 업로드 age 기준 1차 컷.
+
+    업로드 age는 실제 published_at UTC timestamp 기준 (초 단위) — 정수 days_since_upload
+    는 리포트 표시용이며, 여기 필터 판정에는 사용하지 않는다.
+
+    - recent (MIN_AGE_DAYS_EXCLUSIVE=None, UPLOADED_WITHIN_DAYS=30):
+        pub >= now - 30일 통과 (정확히 30일도 통과)
+    - standard (MIN_AGE_DAYS_EXCLUSIVE=30, UPLOADED_WITHIN_DAYS=365):
+        pub < now - 30일 AND pub >= now - 365일 통과 (정확히 30일은 컷)
+    """
     min_views = CFG["MIN_VIEWS"]
     max_dur = CFG["MAX_DURATION_SEC"]
-    within_days = CFG["UPLOADED_WITHIN_DAYS"]
+    age_min = CFG.get("MIN_AGE_DAYS_EXCLUSIVE")   # None 또는 30
+    age_max = CFG.get("UPLOADED_WITHIN_DAYS")     # 30 또는 365
 
     passed, excluded = [], []
     for v in videos:
@@ -569,9 +644,17 @@ def hard_filter(videos, now):
         if v["duration_sec"] > max_dur:
             excluded.append((v, f"길이 초과 ({v['duration_sec']}초)"))
             continue
-        dt = parse_date(v["published_at"])
-        if dt is not None and (now - dt).days > within_days:
-            excluded.append((v, f"업로드 {within_days}일 초과"))
+        # timestamp 기반 age 판정 (source of truth)
+        pub = parse_timestamp(v["published_at"])
+        if pub is None:
+            excluded.append((v, "업로드 시간 파싱 실패 (age_parse)"))
+            continue
+        if age_min is not None and pub >= now - timedelta(days=age_min):
+            # strict >= 컷 → 정확히 age_min일 = 컷 (standard에서 30일은 recent 소속)
+            excluded.append((v, f"업로드 {age_min}일 이내 (범위 밖)"))
+            continue
+        if age_max is not None and pub < now - timedelta(days=age_max):
+            excluded.append((v, f"업로드 {age_max}일 초과"))
             continue
         passed.append(v)
     return passed, excluded
@@ -615,27 +698,33 @@ def compute_metrics(v, now):
 # ============================================================================
 # Claude 분석
 # ============================================================================
-BENCHMARK_SYSTEM_PROMPT = """당신은 'K-pop Shorts 채널 '털어드림'의 벤치마크 큐레이터입니다.
+BENCHMARK_SYSTEM_PROMPT = """당신은 K-pop Shorts 채널 '털어드림'의 벤치마크 큐레이터입니다.
 타 채널의 인기 Shorts를 보고, 털어드림에 후보로 쓸 만한지 평가하고 기획 포인트를 뽑습니다.
 
 # 채널 정체성
 
-'털어드림'은 K-pop 연예인 중심의 시사/논란 분석형 Shorts 채널입니다. 단순 가십이나
-이슈 보도가 아니라 "이슈가 만들어낸 파장·관계·구조"를 분석적으로 다룹니다.
+'털어드림'은 K-pop 연예인 중심의 이슈·비하인드·관계성 분석형 Shorts 채널입니다.
+단순 가십이나 장면 전달이 아니라, 인물의 행동·감정·관계·산업 구조 속에서
+"왜 이런 장면이 나왔는지, 어떤 맥락이 있는지, 무엇이 반복 소비되는지"를 분석적으로 다룹니다.
 
 핵심 공식 — 시의성 지연:
   1차(이슈 자체) → 2차(반응 정리·해석형) → 3차(여론 분석·산업 영향)
 이슈 직후 단순 보도가 아닌, 2차/3차 해석으로 재가공해 시간이 지나도 유효한
 구조적 분석을 추구합니다. 휘발성 콘텐츠 ❌, 반복 가능한 구조적 콘텐츠 ✅.
 
-# 8가지 핵심 소재 유형 (후보는 이 중 하나에 명확히 속해야 함)
+# 8가지 핵심 소재 유형
+
+털어드림에 직접 사용할 후보는 아래 8가지 유형 중 하나에 명확히 속하는 것을 우선합니다.
+다만 벤치마크 목적에서는 8가지 유형에 완전히 속하지 않더라도,
+재사용 가능한 훅·제목 구조·관계성·페르소나·팬덤 반응 구조가 있으면 참고 가치가 있다고 판단할 수 있습니다.
 
 1. K-pop 산업 분석: 계약·경제·정책·소속사 시스템
 2. 아이돌 뒷이야기: 녹음실·촬영장·연습실 비하인드
 3. 아이돌 일상 상황극: 실물 vs 무대, 기대 vs 현실 갭
 4. 뮤직비디오 비하인드: 위험 촬영, NG 장면, 메이킹 디테일
 5. 아이돌 고충 분석: 수면·다이어트·스케줄·건강·심리
-6. 세대 간 관계성: 선배→후배 영향, 그룹 간 계보, 멤버 간 관계
+6. **관계성·계보 분석**: 선배 → 후배 영향, 그룹 간 계보, 멤버 간 관계,
+   팬-아이돌 상호작용에서 반복되는 관계 패턴
 7. 실력/논란 해설: 안무·라이브·인성 논란의 구조적 이유
 8. 연습생/데뷔 비하인드: 회사 결정·트레이닝 시스템·데뷔 과정
 
@@ -655,8 +744,8 @@ BENCHMARK_SYSTEM_PROMPT = """당신은 'K-pop Shorts 채널 '털어드림'의 �
 - YG: BLACKPINK, BABYMONSTER, TREASURE
 - JYP: TWICE, ITZY, NMIXX, Stray Kids
 - 기타: IVE, (G)I-DLE, MAMAMOO, ATEEZ, TWS, KISS OF LIFE, BOYNEXTDOOR,
-  fromis_9, ZEROBASEONE
-- 솔로로 트렌드 1군 진입: 이채영, 장원영, 안유진, (우주소녀 출신) 다영
+  fromis_9, ZEROBASEONE, RESCENE
+- 솔로로 트렌드 1군 진입: (아이즈원 출신) 최예나, 권은비, 조유리, (우주소녀 출신) 다영
 무명·소형 기획사·트로트·해외 K-pop은 1군 외.
 
 동명이인 주의: 한국 아이돌 이름은 동명이인이 흔합니다(다영/지수/유나/하니 등).
@@ -665,35 +754,61 @@ BENCHMARK_SYSTEM_PROMPT = """당신은 'K-pop Shorts 채널 '털어드림'의 �
 
 # 좋은 후보 / 나쁜 후보 신호
 
-좋은 후보: 1군 인물 직접 등장, 의문형/부정형 제목, 시의성 낮고 반복 가능,
+좋은 직접 후보: 1군 인물 직접 등장, 의문형/부정형 제목, 시의성 낮고 반복 가능,
   8개 소재 유형에 명확히 속함, 분석 각도 존재, 한국어 제목.
-나쁜 후보: 영어 제목, 직캠/뮤비/무대 본방 그 자체, 1~2개월 휘발 가십,
-  무명·유튜버 중심, 단순 짤·밈, 자극·낚시 톤, 분석 각도 없음.
+
+나쁜 후보: 영어 제목, 직캠/뮤비/무대 본방 그 자체, 특정 시점에만 의미가 있는 휘발성 가십,
+  콘텐츠의 주인공이 무명 아이돌·일반 유튜버 중심인 경우, 자극·낚시 톤,
+  분석 각도와 재사용 가능한 기획 포인트가 모두 없음.
+
+단순 짤·밈·리액션·모음형이라는 이유만으로 자동 탈락시키지 않습니다.
+반복 가능한 제목 구조, 강한 훅, 멤버 페르소나, 관계성, 팬덤 반응 구조 등
+털어드림식으로 변형 가능한 기획 포인트가 있다면 벤치마크 가치가 있는 것으로 판단합니다.
 
 지시받은 출력 형식(JSON)을 정확히 따르세요. JSON 외 텍스트는 출력하지 마세요.
+
+# 벤치마크 평가 원칙
+
+벤치마크에서는 "털어드림에 그대로 사용할 수 있는가"와
+"소재·훅·구성 방식을 털어드림식으로 변형할 가치가 있는가"를 구분해서 판단합니다.
+
+단순 밈·리액션·모음형 콘텐츠라도,
+반복 가능한 제목 구조, 강한 첫 3초 훅, 멤버 페르소나,
+관계성, 팬덤 반응 구조 등 재사용 가능한 기획 포인트가 명확하면
+벤치마크 가치는 있다고 판단할 수 있습니다.
+
+단, weekly 실제 후보 선정 기준은 별개이며,
+벤치마크 가치가 있다고 해서 실제 후보로 자동 채택되는 것은 아닙니다.
 """
 
 VIDEO_SCHEMA = {
     "type": "object",
     "properties": {
-        "fit_score": {"type": "integer"},
+        # 축 A — 직접 후보 적합도
+        "fit_score": {"type": "integer"},           # 0-100
         "recommend": {"type": "boolean"},
         "fit_reason": {"type": "string"},
+        # 축 B — 벤치마크 가치 (독립 축, fit_score와 상관관계 강제 없음)
+        "benchmark_value_score": {"type": "integer"},   # 0-100
+        "benchmark_value_reason": {"type": "string"},   # 무엇을 재사용 가능한지 구체적으로
+        # 공통 메타
         "topic_type": {"type": "string"},
         "hook_type": {"type": "string"},
         "idol_tier": {"type": "string"},
         "risk": {"type": "string"},
         "teoldeurim_angle": {"type": "string"},
     },
-    "required": ["fit_score", "recommend", "fit_reason", "topic_type",
-                 "hook_type", "idol_tier", "risk", "teoldeurim_angle"],
+    "required": ["fit_score", "recommend", "fit_reason",
+                 "benchmark_value_score", "benchmark_value_reason",
+                 "topic_type", "hook_type", "idol_tier", "risk", "teoldeurim_angle"],
     "additionalProperties": False,
 }
 
 PATTERN_SCHEMA = {
     "type": "object",
     "properties": {
-        "common_patterns": {
+        # A. 직접 후보 공통 패턴 — fit_score 축 관점
+        "direct_common_patterns": {
             "type": "array",
             "items": {
                 "type": "object",
@@ -705,20 +820,48 @@ PATTERN_SCHEMA = {
                 "additionalProperties": False,
             },
         },
-        "planning_points": {
+        # B. 벤치마크형 공통 패턴 — 훅·페르소나·관계성·팬덤 반응 관점
+        "benchmark_common_patterns": {
             "type": "array",
             "items": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string"},
+                    "label": {"type": "string"},
                     "detail": {"type": "string"},
                 },
-                "required": ["title", "detail"],
+                "required": ["label", "detail"],
+                "additionalProperties": False,
+            },
+        },
+        # C. 채널별 인사이트 — 실제 표본에 근거. 표본 부족 시 note에 명시
+        "per_channel_insights": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "channel": {"type": "string"},
+                    "sample_size": {"type": "integer"},
+                    "note": {"type": "string"},
+                    "insights": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "label": {"type": "string"},
+                                "detail": {"type": "string"},
+                            },
+                            "required": ["label", "detail"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                "required": ["channel", "sample_size", "note", "insights"],
                 "additionalProperties": False,
             },
         },
     },
-    "required": ["common_patterns", "planning_points"],
+    "required": ["direct_common_patterns", "benchmark_common_patterns",
+                 "per_channel_insights"],
     "additionalProperties": False,
 }
 
@@ -766,10 +909,36 @@ def analyze_video(client, v):
         f"업로드: {v['published_at'][:10]} ({days_str})\n"
         f"해시태그: {hts}\n"
         f"URL: {v['url']}\n\n"
-        "## 출력할 JSON 필드\n"
-        "- fit_score: 0~100 정수. 털어드림 후보로서의 적합도\n"
+        "## 출력할 JSON 필드 (두 점수를 독립적으로 평가)\n\n"
+        "### 축 A — 직접 후보 적합도\n"
+        "- fit_score: 0~100 정수. 이 영상을 털어드림 채널에 직접 후보로 가져와\n"
+        "  2차/3차 분석형 콘텐츠로 변형하기 좋은가? (8소재·5훅·1군 인물 기준)\n"
         "- recommend: boolean. fit_score 60 이상이고 채널 톤에 맞으면 true\n"
-        "- fit_reason: 왜 쓸 만한지(또는 아닌지) 1~2문장, 한국어\n"
+        "- fit_reason: 왜 쓸 만한지(또는 아닌지) 1~2문장, 한국어\n\n"
+        "### 축 B — 벤치마크 가치 (fit_score와 독립. 상관관계 강제 X)\n"
+        "- benchmark_value_score: 0~100 정수. 직접 후보 적합도와 별개로,\n"
+        "  소재·훅·제목 구조·관계성·페르소나·팬덤 반응 등에서 참고 가치 정도.\n"
+        "  같은 영상이 fit=30/bv=80 이거나 fit=85/bv=40 이어도 됨.\n"
+        "  Anchor:\n"
+        "    0~29:  재사용 가능한 훅·구조·페르소나·관계성 포인트가 거의 없음\n"
+        "    30~59: 일부 참고 요소는 있으나 일반적이거나 재사용성이 제한적\n"
+        "    60~79: 털어드림식으로 변형 가능한 훅·제목 구조·관계성·페르소나 포인트가 명확\n"
+        "    80~100: 직접 후보 적합도와 무관하게 매우 강한 벤치마크 가치.\n"
+        "            반복 가능한 포맷·캐릭터성·팬덤 반응 구조 등 뚜렷한 재사용 요소\n"
+        "- benchmark_value_reason: 구체적으로 무엇을 재사용 가능한지 명시.\n"
+        "  '참고 가치 있음', '훅이 좋음' 같은 추상 표현 금지. 반드시 아래 중 하나 이상\n"
+        "  명시적으로 지정:\n"
+        "    · 제목 구조 (구체 패턴 명시)\n"
+        "    · 첫 3초 훅 (어떤 형태의 훅인지)\n"
+        "    · 멤버 페르소나 (어떤 캐릭터 각인)\n"
+        "    · 팬-아이돌 상호작용 (어떤 상호작용 형태)\n"
+        "    · 멤버 간 관계성 (어떤 관계 구도)\n"
+        "    · 팬덤 인사이더 문화 (구체 요소)\n"
+        "    · 반복 행동 패턴 (어떤 캐릭터 반복)\n"
+        "    · 유머·리액션 구조 (어떤 유머 형태)\n"
+        "    · 컴필레이션 방식 (모음 구조)\n"
+        "    · 감정 서사 (어떤 감정 흐름)\n\n"
+        "### 공통 메타\n"
         "- topic_type: 8개 소재 유형 중 하나 + 등장 인물/그룹 괄호 부기\n"
         "- hook_type: 5개 훅 패턴 중 하나\n"
         "- idol_tier: '1군' / '(추정) 1군' / '1군 외' 중 하나\n"
@@ -796,6 +965,8 @@ def analyze_video(client, v):
         data = json.loads(text)
         if not isinstance(data.get("fit_score"), int):
             data["fit_score"] = to_int(data.get("fit_score"))
+        if not isinstance(data.get("benchmark_value_score"), int):
+            data["benchmark_value_score"] = to_int(data.get("benchmark_value_score"))
         return data, _usage_of(resp)
     except Exception as e:
         print(f"  ⚠️ 분석 실패 [{v['title'][:30]}...]: {e}")
@@ -803,6 +974,8 @@ def analyze_video(client, v):
             "fit_score": 0,
             "recommend": False,
             "fit_reason": "(분석 실패 — 수동 확인 필요)",
+            "benchmark_value_score": 0,
+            "benchmark_value_reason": "(분석 실패 — 수동 확인 필요)",
             "topic_type": "(분석 실패)",
             "hook_type": "",
             "idol_tier": "",
@@ -812,32 +985,70 @@ def analyze_video(client, v):
 
 
 def analyze_patterns(client, candidates):
-    """선별된 후보들을 종합 — 공통 패턴 + 기획 포인트."""
+    """3섹션 패턴 분석 — 직접 공통 / 벤치마크형 공통 / 채널별 인사이트.
+
+    candidates는 pattern_input(video_id unique 처리 완료된 리스트).
+    두 축(direct_final + benchmark_final) 합쳐서 unique 처리한 표본을 기반으로
+    3섹션 각각 생성. 채널별 sample_size 명시. 표본 부족 시 반드시 note에 명시.
+    근거 없는 추측 금지.
+    """
+    # 채널별 sample_size 사전 계산 (프롬프트에 명시하여 표본 부족 안전장치)
+    from collections import Counter
+    channel_counts = Counter(v.get("channel_name", "?") for v in candidates)
+    channel_lines = [
+        f"  · {ch}: {n}개 표본" for ch, n in channel_counts.most_common()
+    ]
+
     lines = []
     for i, v in enumerate(candidates, 1):
         a = v.get("analysis", {})
         lines.append(
-            f"{i}. [{a.get('fit_score', 0)}점] {v['title']}\n"
+            f"{i}. [{v.get('channel_name', '?')}] "
+            f"fit={a.get('fit_score', 0)} / bv={a.get('benchmark_value_score', 0)} — "
+            f"{v['title']}\n"
             f"   소재: {a.get('topic_type', '')} / 훅: {a.get('hook_type', '')}\n"
             f"   조회수 {v['views']:,} · 좋아요율 {fmt_pct(v['like_rate'])} · "
             f"댓글률 {fmt_pct(v['comment_rate'])} · 길이 {v['duration_sec']}초\n"
-            f"   적합 이유: {a.get('fit_reason', '')}\n"
+            f"   fit 이유: {a.get('fit_reason', '')}\n"
+            f"   bv 이유: {a.get('benchmark_value_reason', '')}\n"
             f"   변형 각도: {a.get('teoldeurim_angle', '')}"
         )
     user_msg = (
-        "아래는 '털어드림' 후보로 선별된 타 채널 인기 Shorts 목록입니다.\n"
-        "이 후보들을 종합해서 공통 패턴과 털어드림식 기획 포인트를 도출하세요.\n\n"
+        "아래는 '털어드림' 벤치마크 분석 대상으로 선별된 타 채널 인기 Shorts입니다.\n"
+        "(direct_final + benchmark_final 두 축의 합집합, video_id 기준 unique 처리됨)\n\n"
+        "## 표본 개요\n"
+        f"총 표본: {len(candidates)}개\n"
+        "채널별 분포:\n"
+        + "\n".join(channel_lines) + "\n\n"
+        "## 이 표본으로 3섹션을 생성하세요\n\n"
         + "\n\n".join(lines)
-        + "\n\n## 출력할 JSON 필드\n"
-        "- common_patterns: 3~6개. 각 항목 {label, detail}.\n"
-        "    제목 구조 / 훅 / 소재 / 반응(좋아요율·댓글률) 측면의 공통점.\n"
-        "- planning_points: 3~5개. 각 항목 {title, detail}.\n"
-        "    위 패턴을 털어드림식(2차/3차 해석)으로 바꿔 쓸 수 있는 구체 기획 아이디어.\n"
+        + "\n\n## 출력할 JSON 필드 (3섹션)\n\n"
+        "### A. direct_common_patterns (2~5개)\n"
+        "털어드림 직접 활용도가 높은 영상(fit_score 높은 후보)들의 공통 구조.\n"
+        "각 항목 {label, detail}. 제목 구조·훅·소재·반응 측면.\n\n"
+        "### B. benchmark_common_patterns (2~5개)\n"
+        "직접 적합도와 무관하게 훅·페르소나·관계성·팬덤 반응·유머·감정 서사 등에서 "
+        "재사용 가치가 높은 패턴 (benchmark_value_score 높은 후보 중심).\n"
+        "각 항목 {label, detail}. 반복 가능한 포맷·캐릭터성 강조.\n\n"
+        "### C. per_channel_insights (모든 등장 채널)\n"
+        "각 항목 {channel, sample_size, note, insights}.\n"
+        "- channel: 채널명 (위 표본 개요 그대로)\n"
+        "- sample_size: 위에 명시된 표본 수 (정확히 그 숫자)\n"
+        "- note: 표본이 3개 미만이면 반드시 '분석 표본 부족 (N개) — "
+        "제한적 관찰' 형식으로 명시. 표본 3개 이상이면 빈 문자열 또는 짧은 메모.\n"
+        "- insights: 이 채널 특유의 패턴 (부정형 제목 / 페르소나 반복 / 팬덤 인사이더 문화 등).\n"
+        "  각 인사이트는 {label, detail}. 근거 없는 추측 금지 — 반드시 표본에 실제로 관찰된 것만.\n"
+        "  표본 부족 시 insights는 빈 리스트 또는 매우 제한적으로.\n\n"
+        "## 필수 규칙\n"
+        "1. 각 섹션은 표본 데이터에 실제 기반. 근거 없는 일반론 금지.\n"
+        "2. per_channel_insights는 sample_size가 실제 표본 수와 정확히 일치해야 함.\n"
+        "3. 표본 3개 미만 채널은 반드시 note에 부족 명시. insights를 억지로 채우지 말 것.\n"
+        "4. 채널명은 위 표본 개요의 채널명과 정확히 일치시킬 것.\n"
     )
     try:
         resp = client.messages.create(
             model=CFG["ANALYSIS_MODEL"],
-            max_tokens=4096,
+            max_tokens=6144,
             thinking={"type": "adaptive"},
             output_config={
                 "format": {"type": "json_schema", "schema": PATTERN_SCHEMA},
@@ -854,7 +1065,9 @@ def analyze_patterns(client, candidates):
         return json.loads(text), _usage_of(resp)
     except Exception as e:
         print(f"  ⚠️ 패턴 분석 실패: {e}")
-        return {"common_patterns": [], "planning_points": []}, \
+        return {"direct_common_patterns": [],
+                "benchmark_common_patterns": [],
+                "per_channel_insights": []}, \
                {"input": 0, "cache_write": 0, "cache_read": 0, "out": 0}
 
 
@@ -966,8 +1179,42 @@ html.js .js-only{display:inline}
 .card .submeta{font-size:12px;color:#71717a;margin-bottom:10px}
 .card .submeta b{color:#8b1e3f}
 .fit{display:inline-block;font-size:13px;font-weight:900;color:#fff;
-  padding:3px 11px;border-radius:20px;margin-bottom:8px}
+  padding:3px 11px;border-radius:20px;margin-bottom:8px;margin-right:6px;
+  vertical-align:middle}
 .fit.hi{background:#15803d}.fit.mid{background:#b45309}.fit.lo{background:#71717a}
+
+/* 벤치마크 가치 primary badge — 파란 계열 (fit과 색상 구분) */
+.bv{display:inline-block;font-size:13px;font-weight:900;color:#fff;
+  padding:3px 11px;border-radius:20px;margin-bottom:8px;margin-right:6px;
+  vertical-align:middle}
+.bv.hi{background:#1e5f8b}.bv.mid{background:#6b9dc4}.bv.lo{background:#a1a1aa}
+
+/* 보조 점수 badge — 회색 참고용 (다른 축 점수 표시) */
+.score-sec{display:inline-block;font-size:11px;font-weight:700;color:#71717a;
+  background:#f4f4f5;border:1px solid #e4e4e7;padding:2px 8px;border-radius:12px;
+  margin-right:6px;vertical-align:middle}
+
+/* Section 2 — 3섹션 기획 포인트 헤더 */
+.pat-section-h{font-size:16px;font-weight:800;color:#8b1e3f;
+  margin:24px 0 6px;padding-top:12px;border-top:2px solid #e4e4e7}
+.pat-section-h:first-of-type{border-top:none;padding-top:0}
+.pat-section-desc{font-size:12px;color:#71717a;margin-bottom:12px}
+
+/* C. 채널별 인사이트 카드 */
+.ch-card{background:#fff;border:1px solid #e4e4e7;border-radius:12px;
+  padding:14px 18px;margin-bottom:10px}
+.ch-card.low-sample{background:#fefce8;border-color:#facc15}
+.ch-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.ch-name{font-size:14px;color:#18181b}
+.ch-sample{font-size:11px;font-weight:700;color:#71717a;
+  background:#f4f4f5;border:1px solid #e4e4e7;padding:2px 8px;border-radius:10px}
+.ch-sample.low{color:#a16207;background:#fef9c3;border-color:#eab308}
+.ch-note{font-size:12px;color:#a16207;font-weight:600;margin-bottom:8px}
+.ch-insight{margin:6px 0;padding:8px 10px;background:#fafaf9;
+  border-left:3px solid #8b1e3f;border-radius:0 6px 6px 0}
+.ci-label{font-size:13px;font-weight:700;color:#8b1e3f}
+.ci-detail{font-size:12px;color:#3f3f46;margin-top:2px}
+.ch-empty{font-size:12px;color:#a1a1aa;font-style:italic;padding:4px 0}
 .metrics{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
 .metrics .m{font-size:11px;background:#f4f4f5;border:1px solid #e4e4e7;
   border-radius:6px;padding:4px 9px;color:#3f3f46}
@@ -1009,9 +1256,18 @@ def _fit_class(score):
     return "lo"
 
 
-def _render_candidate(rank, v):
+def _render_candidate(rank, v, mode="direct"):
+    """카드 렌더 — mode에 따라 primary 점수와 primary 사유가 달라짐.
+
+    mode="direct":    fit_score badge primary, fit_reason 강조
+    mode="benchmark": benchmark_value_score badge primary, benchmark_value_reason 강조
+
+    26.07.14 정책 변경: direct_final과 benchmark_final은 상호 배타적 (dedup 후 승격).
+    이전의 "다른 리스트에도 선정됨" dup badge는 더 이상 발생하지 않아 제거.
+    """
     a = v.get("analysis", {})
-    score = a.get("fit_score", 0)
+    fit_score = a.get("fit_score", 0)
+    bv_score = a.get("benchmark_value_score", 0)
     days = v.get("days_since_upload")
     days_str = f"{days}일 전" if days is not None else "업로드일 불명"
     thumb = (f'<img class="thumb" src="{esc_html(v["thumbnail"])}" alt="">'
@@ -1033,17 +1289,34 @@ def _render_candidate(rank, v):
         title_el = f'<a href="{esc_html(raw_url)}">{esc_html(v["title"])}</a>'
     else:
         title_el = esc_html(v["title"])  # 비클릭 plain text
+
+    # primary vs secondary badge 결정 (mode별)
+    if mode == "benchmark":
+        primary_badge = (f'<span class="bv {_fit_class(bv_score)}">'
+                         f'벤치마크 가치 {bv_score}</span>')
+        secondary_badge = (f'<span class="score-sec">'
+                           f'직접 적합도 {fit_score}</span>')
+        primary_reason_label = "왜 참고 가치 있는가"
+        primary_reason = a.get("benchmark_value_reason", "") or "(사유 누락)"
+    else:  # direct (default)
+        primary_badge = (f'<span class="fit {_fit_class(fit_score)}">'
+                         f'적합도 {fit_score}</span>')
+        secondary_badge = (f'<span class="score-sec">'
+                           f'벤치마크 가치 {bv_score}</span>')
+        primary_reason_label = "왜 쓸 만한가"
+        primary_reason = a.get("fit_reason", "")
+
     return f"""
   <div class="card">
     <div class="rank">{rank:02d}</div>
     {thumb}
     <div class="body">
-      <span class="fit {_fit_class(score)}">적합도 {score}</span>
+      {primary_badge}{secondary_badge}
       <div class="title">{title_el}</div>
       <div class="submeta"><b>{esc_html(v['channel_name'])}</b>
         &nbsp;·&nbsp; 구독자 {fmt_int(v['subscribers'])}</div>
       <div class="metrics">{metrics}</div>
-      <div class="field"><span class="lab">왜 쓸 만한가</span>{esc_html(a.get('fit_reason',''))}</div>
+      <div class="field"><span class="lab">{primary_reason_label}</span>{esc_html(primary_reason)}</div>
       <div class="field"><span class="lab">소재 유형</span>{esc_html(a.get('topic_type',''))}</div>
       <div class="tags">
         <span class="t">훅: {esc_html(a.get('hook_type',''))}</span>
@@ -1074,9 +1347,15 @@ _BENCHMARK_STAGE_TABS = [
     ("sent_excluded",      "기발송 제외",
      "weekly 기발송 영상 ({n}개)",
      "history에서 발견된 weekly 발송 이력 — 분석은 했지만 후보 리스트에서 제외됨."),
-    ("final",              "최종 참고 후보",
-     "최종 참고 후보 ({n}개)",
-     "적합도 순 최종 후보. 각 카드에 털어드림식 변형 각도 표기."),
+    ("direct_final",       "직접 후보 TOP {n}",
+     "직접 후보 TOP {n}",
+     "털어드림에 그대로 또는 2차/3차 해석으로 변형해 활용하기 좋은 후보 "
+     "(fit_score 상위, 기발송 제외)."),
+    ("benchmark_final",    "벤치마크 가치 TOP {n}",
+     "벤치마크 가치 TOP {n}",
+     "직접 후보 적합도와 무관하게 소재·훅·제목 구조·관계성·페르소나·팬덤 반응 측면에서 "
+     "재사용 가치가 높은 후보 (benchmark_value_score 상위, 기발송 제외). "
+     "직접 후보 TOP과 중복되는 영상은 제외되어 별도 신규 후보만 표시."),
 ]
 
 
@@ -1140,15 +1419,22 @@ def _render_si_row(rank, v):
 
 
 def _render_stage_body(key, items):
-    """탭 패널 본문 — final은 카드, 그 외는 컴팩트 리스트.
+    """탭 패널 본문 — direct_final/benchmark_final은 카드, 그 외는 컴팩트 리스트.
 
-    각 행 자체는 모두 렌더링하되, JS가 INITIAL=30개만 표시하고 나머지는 숨김.
+    각 행은 모두 렌더링하되, JS가 INITIAL=30개만 표시하고 나머지는 숨김.
     '더보기' 버튼 클릭 시 STEP=50개씩 추가 노출 (weekly.py 패턴).
+
+    26.07.14 정책 변경: direct_final과 benchmark_final은 상호 배타적 (dedup 후 승격)
+    이라 dup 참고 badge 로직 제거됨.
     """
     if not items:
         return '<div class="empty">해당 단계의 영상이 없습니다.</div>'
-    if key == "final":
-        return "".join(_render_candidate(i, v) for i, v in enumerate(items, 1))
+    if key in ("direct_final", "benchmark_final", "final"):
+        mode = "benchmark" if key == "benchmark_final" else "direct"
+        return "".join(
+            _render_candidate(i, v, mode=mode)
+            for i, v in enumerate(items, 1)
+        )
     rows = "".join(_render_si_row(i, v) for i, v in enumerate(items, 1))
     return f'<div class="si-list">{rows}</div>'
 
@@ -1172,19 +1458,31 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used):
     min_views = config_used.get("MIN_VIEWS", 0)
     max_dur = config_used.get("MAX_DURATION_SEC", 0)
     within_days = config_used.get("UPLOADED_WITHIN_DAYS", 0)
+    # 사용자-facing 업로드 age 범위 문구 — 실제 local timestamp 필터 기준 반영.
+    # (내부 API pull buffer 는 노출 안 함)
+    _age_min = config_used.get("MIN_AGE_DAYS_EXCLUSIVE")
+    if _age_min is None:
+        _age_head = "업로드 직후"
+    else:
+        _age_head = f"{_age_min}일 초과"
+    _age_tail = f"{within_days}일 이내" if within_days else "제한 없음"
+    age_range_label = f"{_age_head} ~ {_age_tail}"
 
-    default_stage = "final"
+    default_stage = "direct_final"  # 기본 탭 = 직접 후보 (기존 "final" 대체)
+
     stat_buttons = []
     panels = []
     for key, label, ptitle_tmpl, pdesc in _BENCHMARK_STAGE_TABS:
         items = stage_data.get(key, []) or []
         n = len(items)
-        primary = " primary" if key == "final" else ""
+        primary = " primary" if key == "direct_final" else ""
         active = " active" if key == default_stage else ""
+        # label에도 {n} 플레이스홀더가 들어갈 수 있음 (예: "직접 후보 TOP {n}")
+        label_rendered = label.format(n=n) if "{n}" in label else label
         stat_buttons.append(
             f'<button class="stat{primary}{active}" data-stage="{key}" type="button">'
             f'<div class="stat-n">{n}</div>'
-            f'<div class="stat-k">{esc_html(label)}</div>'
+            f'<div class="stat-k">{esc_html(label_rendered)}</div>'
             f'</button>'
         )
         ptitle = ptitle_tmpl.format(n=n, max_views_label=max_views_label)
@@ -1204,24 +1502,72 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used):
             f'</div>'
         )
 
-    # 기획 포인트 (별도 섹션 - 기존 그대로)
-    cps = patterns.get("common_patterns", [])
-    if cps:
-        pat_html = "".join(
+    # 3섹션 기획 포인트 리포트 (Phase 4 개편)
+    # A. 직접 후보 공통 패턴 (fit_score 축)
+    def _render_pat_list(items, empty_msg):
+        if not items:
+            return f'<div class="empty">{esc_html(empty_msg)}</div>'
+        return "".join(
             f'<div class="pat"><div class="pl">{esc_html(p.get("label",""))}</div>'
-            f'<div class="pd">{esc_html(p.get("detail",""))}</div></div>' for p in cps)
-    else:
-        pat_html = '<div class="empty">도출된 공통 패턴이 없습니다.</div>'
-
-    pps = patterns.get("planning_points", [])
-    if pps:
-        plan_html = "".join(
-            f'<div class="plan"><div class="pt">기획 포인트 {i}. '
-            f'{esc_html(p.get("title",""))}</div>'
             f'<div class="pd">{esc_html(p.get("detail",""))}</div></div>'
-            for i, p in enumerate(pps, 1))
+            for p in items)
+
+    # 하위 호환: 구버전 patterns dict가 "common_patterns"/"planning_points"만 있는 경우
+    # 3섹션 스키마로 폴백 매핑 (기존 filtered_raw 재렌더 대비)
+    if "direct_common_patterns" not in patterns and "common_patterns" in patterns:
+        patterns = {
+            "direct_common_patterns": patterns.get("common_patterns", []),
+            "benchmark_common_patterns": [],
+            "per_channel_insights": [],
+        }
+
+    direct_pat_html = _render_pat_list(
+        patterns.get("direct_common_patterns", []),
+        "도출된 직접 후보 공통 패턴이 없습니다.")
+    bench_pat_html = _render_pat_list(
+        patterns.get("benchmark_common_patterns", []),
+        "도출된 벤치마크형 공통 패턴이 없습니다.")
+
+    # C. 채널별 인사이트 — 표본 부족 시 note 강조
+    channel_insights = patterns.get("per_channel_insights", []) or []
+    if channel_insights:
+        ch_cards = []
+        for entry in channel_insights:
+            ch = esc_html(entry.get("channel", "?"))
+            n = entry.get("sample_size", 0)
+            note = (entry.get("note") or "").strip()
+            insights = entry.get("insights", []) or []
+            # 표본 부족 배지 (샘플 3 미만이면 강조)
+            low_sample = (n < 3)
+            sample_badge = (
+                f'<span class="ch-sample low">표본 {n}개 · 부족</span>'
+                if low_sample else
+                f'<span class="ch-sample">표본 {n}개</span>'
+            )
+            note_html = (f'<div class="ch-note">{esc_html(note)}</div>'
+                         if note else "")
+            if insights:
+                ins_html = "".join(
+                    f'<div class="ch-insight">'
+                    f'<div class="ci-label">{esc_html(ii.get("label",""))}</div>'
+                    f'<div class="ci-detail">{esc_html(ii.get("detail",""))}</div>'
+                    f'</div>'
+                    for ii in insights)
+            else:
+                ins_html = ('<div class="ch-empty">'
+                            '표본 부족 — 근거 있는 인사이트 없음'
+                            '</div>')
+            ch_cards.append(
+                f'<div class="ch-card{" low-sample" if low_sample else ""}">'
+                f'<div class="ch-head"><b class="ch-name">{ch}</b>{sample_badge}</div>'
+                f'{note_html}'
+                f'{ins_html}'
+                f'</div>'
+            )
+        channel_html = "".join(ch_cards)
     else:
-        plan_html = '<div class="empty">도출된 기획 포인트가 없습니다.</div>'
+        channel_html = ('<div class="empty">'
+                        '도출된 채널별 인사이트가 없습니다.</div>')
 
     max_views_li = (f'<li><b>조회수</b> {min_views:,} 이상 ~ '
                     f'<mark>{max_views:,} 이하</mark> (대표님 요청 — 뻔한 영상 컷)</li>'
@@ -1234,7 +1580,7 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used):
 <base target="_blank">
 <title>털어드림 · 타 채널 벤치마크 리포트 {today_label}</title>
 <style>{REPORT_CSS}</style>
-</head><body><div class="page">
+</head><body><div class="page bm-root" data-report="benchmark">
   <section class="hero">
     <div class="eyebrow">Competitor Benchmark Report · {today_label}</div>
     <h1>털어드림 <em>타 채널 벤치마크</em><br>참고 후보 & 기획 포인트</h1>
@@ -1250,38 +1596,54 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used):
       <ul>
         {max_views_li}
         <li><b>길이</b> {max_dur}초 이하 (Shorts 형식)</li>
-        <li><b>업로드</b> {within_days}일 이내</li>
+        <li><b>업로드</b> {age_range_label}</li>
         <li><b>중복</b> weekly 기발송 영상 자동 dedup (history 기반)</li>
         <li><b>채널</b> 제외 채널 자동 차단 (우리 채널 + blocklist)</li>
       </ul>
     </div>
   </details>
 
-  <div class="stats" id="statTabs">
+  <div class="stats" id="bmStatTabs">
     {''.join(stat_buttons)}
   </div>
 
   <div class="search-bar">
-    <input type="text" id="searchInput" class="search-input"
+    <input type="text" id="bmSearchInput" class="search-input"
            placeholder="현재 선택한 리스트에서 제목·채널·사유 검색" autocomplete="off">
-    <span class="search-count" id="searchCount"></span>
+    <span class="search-count" id="bmSearchCount"></span>
   </div>
 
-  <div id="panelWrap">
+  <div id="bmPanelWrap">
     {''.join(panels)}
   </div>
 
   <div class="section-head" style="margin-top:48px">
     <span class="tag">SECTION 2</span>
-    <h2>기획 포인트 리포트</h2>
+    <h2>기획 포인트 리포트 (3섹션)</h2>
   </div>
   <p class="section-desc">
-    분석된 상위 후보들에서 공통적으로 나타난 제목·훅·소재·반응 패턴과,
-    이를 털어드림식으로 바꿔 쓸 수 있는 기획 아이디어.</p>
-  <h3 style="font-size:15px;font-weight:800;margin:10px 0 8px;color:#8b1e3f">공통 패턴</h3>
-  {pat_html}
-  <h3 style="font-size:15px;font-weight:800;margin:20px 0 8px;color:#8b1e3f">털어드림식 기획 포인트</h3>
-  {plan_html}
+    direct_final + benchmark_final 합집합(video_id unique)에서 도출.
+    직접 활용 관점 / 벤치마크 재사용 관점 / 채널별 관점 3섹션.
+  </p>
+
+  <h3 class="pat-section-h">A. 직접 후보 공통 패턴</h3>
+  <p class="pat-section-desc">
+    털어드림 직접 활용도가 높은 영상(fit_score 상위)의 공통 구조.
+  </p>
+  {direct_pat_html}
+
+  <h3 class="pat-section-h">B. 벤치마크형 공통 패턴</h3>
+  <p class="pat-section-desc">
+    직접 적합도와 무관하게 훅·페르소나·관계성·팬덤 반응 등에서 재사용 가치가 높은 패턴.
+  </p>
+  {bench_pat_html}
+
+  <h3 class="pat-section-h">C. 채널별 인사이트</h3>
+  <p class="pat-section-desc">
+    각 참고 채널의 표본 기반 관찰. 표본 3개 미만 채널은 "부족" 배지로 표시되며,
+    근거 없는 추측 없이 실제 관찰만 반영.
+  </p>
+  {channel_html}
 
   <div class="footer">
     <span>털어드림 · 타 채널 벤치마크 모듈 (보조)</span>
@@ -1292,11 +1654,15 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used):
 (function() {{
   // JS 활성화 표시 (CSS의 .js-only가 노출됨)
   document.documentElement.classList.add('js');
+  // 통합 shell에서 다른 report(weekly)와 격리되도록 bm-root scope로 제한.
+  var root = (document.currentScript && document.currentScript.closest('.bm-root'))
+             || document.querySelector('.bm-root')
+             || document.body;
   var INITIAL = 30, STEP = 50;  // 처음엔 30개 노출, '더보기' 클릭 시 +50
-  var tabs = document.querySelectorAll('#statTabs .stat');
-  var panels = document.querySelectorAll('.stage-panel');
-  var searchInput = document.getElementById('searchInput');
-  var searchCount = document.getElementById('searchCount');
+  var tabs = root.querySelectorAll('#bmStatTabs .stat');
+  var panels = root.querySelectorAll('.stage-panel');
+  var searchInput = root.querySelector('#bmSearchInput');
+  var searchCount = root.querySelector('#bmSearchCount');
   var shownLimit = {{}};  // stage -> 현재 표시 한도
 
   function activePanel() {{
@@ -1406,9 +1772,19 @@ def main():
     now_utc = datetime.now(timezone.utc)
     today_label = now_kst.strftime("%Y-%m-%d")
 
+    # PROFILE env 반영 (default = "standard")
+    profile = (os.environ.get("PROFILE") or "standard").strip().lower()
+    profile_cfg = benchmark_config.resolve_config(profile)
+    CFG.clear()
+    CFG.update(profile_cfg)
+
     print("=" * 60)
     print("털어드림 타 채널 벤치마크 모듈")
     print(f"실행 시각 (KST): {now_kst.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"프로파일: {profile}  "
+          f"(SORT_BY={CFG['SORT_BY']}, "
+          f"조회수 {CFG['MIN_VIEWS']:,}~{CFG['MAX_VIEWS']:,}, "
+          f"업로드 {CFG['UPLOADED_WITHIN_DAYS']}일)")
     print("=" * 60)
 
     apify_token = os.environ.get("APIFY_TOKEN", "").strip()
@@ -1426,7 +1802,7 @@ def main():
     manual_channels = refs["manual"]
     auto_discovered_reference_candidates = refs["auto_discovered_reference_candidates"]
     ref_channels = refs["merged"]
-    sent_video_ids = refs["sent_video_ids"]
+    weekly_sent_ids = refs["sent_video_ids"]  # weekly history read-only
     print(f"  수동 {len(manual_channels)}개 + 자동 "
           f"{len(auto_discovered_reference_candidates)}개 → 병합 {len(ref_channels)}개")
     for r in ref_channels:
@@ -1436,6 +1812,14 @@ def main():
         print(f"   [{tag}] {r.get('name', '?')}{extra}")
     # Apify 수집 직전 최종 검증
     validate_reference_channels(ref_channels)
+
+    # benchmark 공용 sent history 로드 (recent + standard 통합 dedup)
+    # → orchestrator(send_report.py)가 발송 성공 후에만 이 디렉터리에 파일을 쓴다.
+    benchmark_sent_ids = load_benchmark_sent_history()
+    # 최종 dedup 대상 = weekly history ∪ benchmark 공용 sent history
+    sent_video_ids = weekly_sent_ids | benchmark_sent_ids
+    print(f"  기발송 dedup: weekly {len(weekly_sent_ids)}개 "
+          f"+ benchmark {len(benchmark_sent_ids)}개 → 합집합 {len(sent_video_ids)}개")
 
     # ── STEP 1. Apify 수집 ──
     print("\n[STEP 1] Apify로 참고 채널 인기 Shorts 수집")
@@ -1521,7 +1905,9 @@ def main():
         "FINAL_CANDIDATES": CFG.get("FINAL_CANDIDATES", 0),
     }
 
-    raw_path = BENCHMARK_DIR / f"{today_label}_filtered_raw.json"
+    # 파일명에 profile 포함 — 같은 날 recent/standard 동시 실행 시 충돌 방지
+    _profile_slug = CFG.get("_PROFILE", "standard")
+    raw_path = BENCHMARK_DIR / f"{today_label}_{_profile_slug}_filtered_raw.json"
 
     def _save_filtered_raw(stages_dict):
         """filtered_raw.json 저장 — 항상 benchmark/ 디렉토리에만 쓴다."""
@@ -1548,6 +1934,8 @@ def main():
         "hard_excluded": [],
         "analyzed": [],
         "sent_excluded": [],
+        "direct_final": [],
+        "benchmark_final": [],
         "final": [],
     })
     print(f"  💾 filtered_raw 1차 저장: {raw_path}")
@@ -1567,49 +1955,101 @@ def main():
     passed.sort(key=lambda v: v["views"], reverse=True)
     to_analyze = passed[:CFG["MAX_ANALYSIS_CANDIDATES"]]
 
-    # ── STEP 6. Claude 분석 (영상별 적합도) ──
+    # ── STEP 6. Claude 분석 (영상별 적합도 + 벤치마크 가치, 두 축 독립 평가) ──
     total_usage = {"input": 0, "cache_write": 0, "cache_read": 0, "out": 0}
     sent_excluded_list = []
-    final_candidates = []
-    patterns = {"common_patterns": [], "planning_points": []}
+    direct_final = []
+    benchmark_final = []
+    final_candidates = []  # backward compat = direct_final
+    # Phase 4 이후 3섹션 구조. HTML 렌더의 legacy fallback은 별도로 유지.
+    patterns = {
+        "direct_common_patterns": [],
+        "benchmark_common_patterns": [],
+        "per_channel_insights": [],
+    }
     if to_analyze:
-        print(f"\n[STEP 6] Claude 분석 — {len(to_analyze)}개 영상 적합도 평가")
+        print(f"\n[STEP 6] Claude 분석 — {len(to_analyze)}개 영상 (fit + benchmark_value 두 축)")
         client = anthropic.Anthropic(api_key=anthropic_key)
         for i, v in enumerate(to_analyze, 1):
             analysis, usage = analyze_video(client, v)
             v["analysis"] = analysis
             _add_usage(total_usage, usage)
-            print(f"  [{i}/{len(to_analyze)}] {v['title'][:34]}... "
-                  f"→ 적합도 {analysis.get('fit_score', 0)}")
+            print(f"  [{i}/{len(to_analyze)}] {v['title'][:30]}... "
+                  f"→ fit {analysis.get('fit_score', 0)} / "
+                  f"bv {analysis.get('benchmark_value_score', 0)}")
 
         # 기발송 영상 표시 (weekly가 이미 발송한 영상)
         exclude_sent = CFG.get("EXCLUDE_SENT_FROM_CANDIDATES", True)
         for v in to_analyze:
             v["already_sent"] = bool(exclude_sent and v["video_id"] in sent_video_ids)
 
-        # 적합도 순 정렬
+        # 시각적 일관성을 위해 analyzed 탭은 fit_score 내림차순 정렬 (기존 동작 유지)
         to_analyze.sort(key=lambda v: v.get("analysis", {}).get("fit_score", 0),
                         reverse=True)
 
-        # Section 1 후보 리스트 = 기발송 제외한 상위 N개
+        # 기발송 분리
         fresh = [v for v in to_analyze if not v.get("already_sent")]
         sent_excluded_list = [v for v in to_analyze if v.get("already_sent")]
-        # sent_excluded 영상에 사유 표기 (탭 표시용)
         for v in sent_excluded_list:
             v["exclusion_reason"] = "weekly 기발송 영상 (history dedup)"
-        final_candidates = fresh[:CFG["FINAL_CANDIDATES"]]
         if sent_excluded_list:
             print(f"  기발송 영상 {len(sent_excluded_list)}개를 후보 리스트에서 제외")
 
-        # Section 2 패턴 분석 입력 = 기발송 포함 상위 N개 (참고 데이터로 유효)
-        pattern_input = to_analyze[:CFG["FINAL_CANDIDATES"]]
+        # ── 두 리스트 계산 (26.07.14 대표님 피드백 반영: 중복 제거 정책) ──
+        # 1) direct_final: fit_score 내림차순 TOP N (기존 방식)
+        # 2) benchmark_final: bv_score 내림차순 전체 후보에서
+        #    direct_final에 이미 포함된 video_id를 제외한 뒤 TOP N
+        # 하드 캡·강제 쿼터·라운드 로빈·채널 기반 점수 보정은 여전히 없음.
+        # benchmark_value_score 자체는 수정/보정하지 않음.
+        direct_sorted = sorted(
+            fresh,
+            key=lambda v: (
+                -(v.get("analysis") or {}).get("fit_score", 0),
+                -v.get("views", 0),  # tiebreak: view_count desc
+            ),
+        )
+        direct_final = direct_sorted[:CFG["FINAL_CANDIDATES"]]
+
+        # direct에 이미 포함된 video_id는 benchmark 후보에서 제외 후 차순위 승격
+        direct_ids = {v.get("video_id") for v in direct_final if v.get("video_id")}
+        benchmark_sorted_dedup = [
+            v for v in sorted(
+                fresh,
+                key=lambda x: (
+                    -(x.get("analysis") or {}).get("benchmark_value_score", 0),
+                    -x.get("views", 0),
+                ),
+            )
+            if v.get("video_id") not in direct_ids
+        ]
+        benchmark_final = benchmark_sorted_dedup[:CFG["FINAL_CANDIDATES"]]
+
+        print(f"  직접 후보 TOP {len(direct_final)}, "
+              f"벤치마크 가치 TOP {len(benchmark_final)} "
+              f"(direct와 중복 video_id는 benchmark에서 제외)")
+
+        # backward compat: 기존 코드가 참조하는 final_candidates도 유지 (= direct_final)
+        final_candidates = direct_final
+
+        # Section 2 패턴 분석 입력 — direct_final + benchmark_final 합집합,
+        # video_id 기준 unique 처리 (중복 표본 과대 계산 방지).
+        # 각 축의 상위 후보를 모두 반영하되 동일 영상이 두 번 카운트되지 않게.
+        seen_pattern = set()
+        pattern_input = []
+        for src in (direct_final, benchmark_final):
+            for v in src:
+                vid = v.get("video_id")
+                if vid and vid not in seen_pattern:
+                    seen_pattern.add(vid)
+                    pattern_input.append(v)
 
         # ── STEP 7. Claude 분석 (공통 패턴 + 기획 포인트) ──
         print(f"\n[STEP 7] Claude 분석 — 공통 패턴 & 기획 포인트 도출")
         patterns, p_usage = analyze_patterns(client, pattern_input)
         _add_usage(total_usage, p_usage)
-        print(f"  공통 패턴 {len(patterns.get('common_patterns', []))}개 / "
-              f"기획 포인트 {len(patterns.get('planning_points', []))}개")
+        print(f"  직접 후보 공통 패턴 {len(patterns.get('direct_common_patterns', []))}개 / "
+              f"벤치마크형 공통 패턴 {len(patterns.get('benchmark_common_patterns', []))}개 / "
+              f"채널별 인사이트 {len(patterns.get('per_channel_insights', []))}개")
 
         cost = estimate_cost(total_usage)
         print(f"  💰 예상 비용: ${cost:.4f} (≈ {cost * 1400:.0f}원)")
@@ -1624,7 +2064,9 @@ def main():
         "hard_excluded": hard_excluded_list,
         "analyzed": to_analyze,
         "sent_excluded": sent_excluded_list,
-        "final": final_candidates,
+        "direct_final": direct_final,        # 신규: fit_score 축 TOP N
+        "benchmark_final": benchmark_final,  # 신규: benchmark_value_score 축 TOP N
+        "final": final_candidates,           # backward compat = direct_final
     }
     # filtered_raw 최종 저장 (모든 stage 데이터 포함)
     _save_filtered_raw(stage_data)
@@ -1632,9 +2074,21 @@ def main():
 
     html = render_report(stage_data, patterns, today_label, ref_channels,
                          config_snapshot)
-    report_path = BENCHMARK_DIR / f"{today_label}_report.html"
+    # 파일명에 profile 포함 — 같은 날 recent/standard 동시 실행 시 충돌 방지
+    report_path = BENCHMARK_DIR / f"{today_label}_{_profile_slug}_report.html"
     report_path.write_text(html, encoding="utf-8")
     print(f"  📄 리포트 저장: {report_path}")
+
+    # ============================================================
+    # REPORT_FRAGMENT_PATH: orchestrator가 통합 shell 조립용으로 요청한 경로
+    # → 발송/dedup write와는 무관. 파일 저장만.
+    # ============================================================
+    report_fragment_path = (os.environ.get("REPORT_FRAGMENT_PATH") or "").strip()
+    if report_fragment_path:
+        frag_p = Path(report_fragment_path)
+        frag_p.parent.mkdir(parents=True, exist_ok=True)
+        frag_p.write_text(html, encoding="utf-8")
+        print(f"  📄 fragment 저장: {frag_p}")
 
     print("\n" + "=" * 60)
     print(f"벤치마크 완료 — 최종 참고 후보 {len(final_candidates)}개")

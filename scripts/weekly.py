@@ -16,7 +16,7 @@ import sys
 import json
 import time
 import re
-import smtplib
+import smtplib  # noqa: F401  (emailer.py로 이관됨. subprocess 실행 환경 진단 시 필요할 수 있어 남겨둠)
 import traceback
 from datetime import datetime, timezone, timedelta
 from email.mime.multipart import MIMEMultipart
@@ -35,14 +35,25 @@ import anthropic
 # ============================================================================
 CONFIG = {
     "MIN_VIEWS": 500_000,           # 100만 이상 → 50만 이상 (26.07.13 변경)
-    "MAX_VIEWS": 5_000_000,           # 500만 미만
+    "MAX_VIEWS": 9_000_000,         # 500만 → 900만으로 상향 (26.07.14, Friday 통합 리포트에서
+                                    # Benchmark standard(50만~900만)와 조건 통일)
     "MAX_DURATION_SEC": 180,
-    # 검색 기간: "업로드 직후 ~ 1년 이내" 영상 (26.07.13 변경).
-    # PRIMARY=FALLBACK=0이라 fallback 로직은 실질 no-op (코드는 유지 — 향후 정책 변경 시 값만 조정)
-    "LOOKBACK_DAYS_OLDEST": 365,             # 가장 오래된 한계 (1년 전)
-    "LOOKBACK_DAYS_NEWEST_PRIMARY": 0,       # 가장 최근 한계 (오늘까지 = 업로드 직후 포함)
-    "LOOKBACK_DAYS_NEWEST_FALLBACK": 0,      # primary와 동일 — fallback 실질 무효
+    # YouTube API pull 범위 — 실제 최종 판정은 아래 MIN_AGE / UPLOADED_WITHIN_DAYS
+    # 기반 로컬 timestamp 필터. API는 경계 누락 방지 buffer(약 1일) 포함 넉넉하게 pull.
+    # standard 최종 목표: 30일 초과 ~ 365일 → API pull: 29~366일 (±1일 buffer)
+    "LOOKBACK_DAYS_OLDEST": 366,             # 366일 전까지 (buffer +1)
+    "LOOKBACK_DAYS_NEWEST_PRIMARY": 29,      # 29일 전까지 (buffer -1)
+    "LOOKBACK_DAYS_NEWEST_FALLBACK": 29,     # primary와 동일 — fallback 실질 무효
     "MIN_HARD_PASS": 25,                     # hard pass 미만이면 fallback 발동
+    # 업로드 age 필터 (실제 published_at UTC timestamp 기준, source of truth):
+    #   MIN_AGE_DAYS_EXCLUSIVE: age > N (strict, exclusive). None이면 하한 없음.
+    #   UPLOADED_WITHIN_DAYS:   age <= N (inclusive). None이면 상한 없음.
+    # standard: 30일 초과 ~ 365일 이내 (정확히 30일은 recent 소속 → 여기서 컷됨).
+    "MIN_AGE_DAYS_EXCLUSIVE": 30,
+    "UPLOADED_WITHIN_DAYS": 365,
+    # YouTube search API의 `order` 값 (viewCount / date / relevance 등).
+    # standard는 조회수 상위 우선, recent는 최신 업로드 우선.
+    "SEARCH_ORDER": "viewCount",
     "MAX_ANALYSIS_CANDIDATES": 30,           # Claude 분석 비용 상한 (조회수 상위 N개만 분석)
     "TARGET_CANDIDATES": 20,                 # 최종 메일에 노출할 개수
     "REGION": "KR",
@@ -88,6 +99,18 @@ CONFIG = {
         "아이돌 코디 비하인드 shorts",
         "아이돌 안무 비하인드 shorts",
         "아이돌 녹음 비하인드 shorts",
+        # 감정 서사·팬 인터랙션 계열 (RESCENE 팬튜브 2채널 분석 반영, 26.07.13 추가)
+        "아이돌 눈물 순간 shorts",
+        "아이돌 역주행 서사 shorts",
+        "아이돌 감동 순간 shorts",
+        "아이돌 팬 상호작용 shorts",
+        "아이돌 팬미팅 실화 shorts",
+        "아이돌 팬한테 부탁 shorts",
+        "아이돌 놀리는 순간 shorts",
+        "아이돌 예상 못 한 반응 shorts",
+        "아이돌 명장면 모음 shorts",
+        "아이돌 캐치프레이즈 shorts",
+        "아이돌 밈 순간 shorts",
         "걸그룹 비하인드 shorts",
         "보이그룹 비하인드 shorts",
         "케이팝 비하인드 shorts",
@@ -95,6 +118,102 @@ CONFIG = {
         "케이팝 팬들이 몰랐던 shorts",
     ],
 }
+
+# ============================================================================
+# 프로파일 — WEEKLY_PROFILE env 기준 CONFIG override.
+# ----------------------------------------------------------------------------
+# - "standard" (default): 위 CONFIG 그대로 (backward compat)
+# - "recent": Monday 통합 리포트용 (0~30일, 조회수 10만~100만, 최신순)
+# WEEKLY_PROFILE 미지정 시 standard — 기존 실행은 완전히 동일하게 유지됨.
+# ============================================================================
+WEEKLY_PROFILES = {
+    # standard 는 CONFIG 최상위 값과 동일 (backward compat).
+    # standard·recent 전환 반복 시에도 recent 잔재 없이 정확한 값으로 복원되도록 명시.
+    "standard": {
+        "MIN_VIEWS": 500_000,
+        "MAX_VIEWS": 9_000_000,
+        "LOOKBACK_DAYS_OLDEST": 366,
+        "LOOKBACK_DAYS_NEWEST_PRIMARY": 29,
+        "LOOKBACK_DAYS_NEWEST_FALLBACK": 29,
+        "MIN_AGE_DAYS_EXCLUSIVE": 30,
+        "UPLOADED_WITHIN_DAYS": 365,
+        "SEARCH_ORDER": "viewCount",
+    },
+    "recent": {
+        "MIN_VIEWS": 100_000,
+        "MAX_VIEWS": 1_000_000,
+        # API pull: 0~31일 (buffer +1). 최종 판정은 로컬 timestamp.
+        "LOOKBACK_DAYS_OLDEST": 31,
+        "LOOKBACK_DAYS_NEWEST_PRIMARY": 0,
+        "LOOKBACK_DAYS_NEWEST_FALLBACK": 0,
+        # 로컬 age 필터: 0일 ≤ age ≤ 30일 (정확히 30일 포함).
+        "MIN_AGE_DAYS_EXCLUSIVE": None,
+        "UPLOADED_WITHIN_DAYS": 30,
+        "SEARCH_ORDER": "date",   # 최신 업로드 우선
+    },
+}
+
+
+def _display_age_range():
+    """리포트·이메일에 표시할 사용자-facing 업로드 age 범위 문구.
+
+    내부 API pull buffer (LOOKBACK_DAYS_*) 는 노출하지 않는다.
+    실제 local timestamp 필터 기준 (MIN_AGE_DAYS_EXCLUSIVE, UPLOADED_WITHIN_DAYS) 만 반영.
+
+    - recent  (MIN=None, MAX=30) : "업로드 직후 ~ 30일 이내"
+    - standard (MIN=30,  MAX=365): "30일 초과 ~ 365일 이내"
+    """
+    age_min = CONFIG.get("MIN_AGE_DAYS_EXCLUSIVE")
+    age_max = CONFIG.get("UPLOADED_WITHIN_DAYS")
+    if age_min is None:
+        head = "업로드 직후"
+    else:
+        head = f"{age_min}일 초과"
+    if age_max is None:
+        tail = "제한 없음"
+    else:
+        tail = f"{age_max}일 이내"
+    return f"{head} ~ {tail}"
+
+
+def _cache_matches_profile(cache_path, current_profile):
+    """DRY_RUN report_data 캐시 재사용 시 profile 일치 검증.
+
+    - 파일명이 이미 profile 접미사로 분리돼 있어 일반적으론 이 함수가 True.
+    - 이중 방어: bundle 내부의 _profile 필드도 검사 (레거시 캐시 대응).
+    - 불일치면 False → 호출부의 elif 조건에서 캐시 재사용을 스킵.
+    """
+    try:
+        cached = json.loads(cache_path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    cached_profile = cached.get("_profile", "standard")
+    if cached_profile != current_profile:
+        print(f"[DRY_RUN] 캐시 profile 불일치 "
+              f"(cached={cached_profile}, current={current_profile}) → 캐시 무시")
+        return False
+    return True
+
+
+def _apply_weekly_profile(profile):
+    """WEEKLY_PROFILE env 값 기준 CONFIG in-place override.
+
+    - None or "" → "standard" 로 정규화
+    - 두 profile 모두 명시적으로 CONFIG 를 override — 프로세스 안에서 profile 전환 반복 시
+      이전 profile 잔재 없이 정확한 값 복원됨. WEEKLY_PROFILES["standard"] 도 완전한
+      standard 값을 갖고 있어 recent→standard 전환도 안전.
+    - 미지원 값 → ValueError.
+    """
+    profile = profile or "standard"
+    if profile not in WEEKLY_PROFILES:
+        raise ValueError(
+            f"Unknown WEEKLY_PROFILE={profile!r}. "
+            f"Available: {sorted(WEEKLY_PROFILES.keys())}"
+        )
+    for k, v in WEEKLY_PROFILES[profile].items():
+        CONFIG[k] = v
+    CONFIG["_PROFILE"] = profile
+
 
 KST = timezone(timedelta(hours=9))
 ROOT = Path(__file__).resolve().parent.parent
@@ -221,12 +340,19 @@ def http_get(url, timeout=20):
 
 
 def search_videos(api_key, query, published_after, published_before):
+    """YouTube 검색 결과를 (video_id, query) 페어 리스트로 반환.
+
+    query 태깅 목적: 동일 video가 여러 검색어에서 잡히면 collect() 단계에서
+    matched_queries 집합으로 누적된다. 리포트에서 "이 후보를 어떤 검색어가
+    발굴했는가"를 후보 단위로 표시하기 위한 데이터.
+    """
     params = {
         "part": "snippet",
         "type": "video",
         "q": query,
         "maxResults": 50,                 # 50이 페이지당 최대 (쿼터 비용은 25/50 동일)
-        "order": "viewCount",
+        # standard = "viewCount" (조회수 desc), recent = "date" (최신 업로드 desc)
+        "order": CONFIG.get("SEARCH_ORDER", "viewCount"),
         "regionCode": CONFIG["REGION"],
         "relevanceLanguage": CONFIG["LANGUAGE"],
         "publishedAfter": published_after,
@@ -236,7 +362,9 @@ def search_videos(api_key, query, published_after, published_before):
     }
     url = f"{BASE}/search?{urlencode(params)}"
     data = http_get(url)
-    return [it["id"]["videoId"] for it in data.get("items", []) if it.get("id", {}).get("videoId")]
+    return [(it["id"]["videoId"], query)
+            for it in data.get("items", [])
+            if it.get("id", {}).get("videoId")]
 
 
 def load_seen_video_meta(skip_filename=None):
@@ -299,6 +427,35 @@ def has_korean(text):
     return bool(re.search(r"[\uAC00-\uD7AF]", text or ""))
 
 
+def parse_timestamp(v):
+    """ISO 8601 timestamp \u2192 aware UTC datetime. \uC2E4\uD328 \uC2DC None.
+
+    YouTube API\uC758 snippet.publishedAt (\uC608: "2026-06-25T11:01:33Z")\uC744 \uCD08 \uB2E8\uC704 \uC815\uD655\uB3C4\uB85C
+    \uD30C\uC2F1\uD55C\uB2E4. \uC5C5\uB85C\uB4DC age \uD310\uC815\uC758 source of truth.
+
+    \uBC18\uD658\uAC12\uC740 \uD56D\uC0C1 tzinfo=UTC aware. fromisoformat\uC774 naive\uB97C \uB3CC\uB824\uC8FC\uB294 date-only
+    fallback\uB3C4 UTC\uB85C attach.
+    """
+    if not v:
+        return None
+    s = str(v).strip().replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError:
+        pass
+    m = re.match(r"(\d{4})-(\d{1,2})-(\d{1,2})", s)
+    if m:
+        try:
+            return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                            tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
 def parse_item(v):
     sn = v.get("snippet", {})
     st = v.get("statistics", {})
@@ -327,7 +484,10 @@ def blocked_by_keyword(title):
 def hard_filter_reason(row):
     """row가 하드 필터에 걸리면 (사유 문자열, drop키) 반환. 통과면 (None, None).
 
-    필터 기준·로직은 기존과 동일 — 단지 탈락 사유를 문자열로 남기는 것뿐.
+    업로드 age 판정은 실제 published_at UTC timestamp 기준 (초 단위 정확도).
+    - recent (MIN_AGE_DAYS_EXCLUSIVE=None, UPLOADED_WITHIN_DAYS=30): age ≤ 30 통과
+    - standard (MIN_AGE=30, UPLOADED_WITHIN=365):  30 < age ≤ 365 통과
+      정확히 age=30 timestamp는 recent에만 포함되도록 strict `>=` 컷 사용.
     """
     v = row["view_count"]
     if v < CONFIG["MIN_VIEWS"]:
@@ -343,6 +503,18 @@ def hard_filter_reason(row):
         return f"채널 차단 ({row['channel']})", "channel"
     if blocked_by_keyword(row["title"]):
         return "제목 키워드 차단 (직캠/풀캠 등)", "keyword"
+    # 업로드 age 필터 (timestamp source of truth)
+    age_min = CONFIG.get("MIN_AGE_DAYS_EXCLUSIVE")   # None 또는 30
+    age_max = CONFIG.get("UPLOADED_WITHIN_DAYS")     # 30 또는 365
+    if age_min is not None or age_max is not None:
+        pub = parse_timestamp(row.get("published_at", ""))
+        if pub is None:
+            return "업로드 시간 파싱 실패 (age_parse)", "age_parse"
+        now = datetime.now(timezone.utc)
+        if age_min is not None and pub >= now - timedelta(days=age_min):
+            return f"업로드 {age_min}일 이내 (범위 밖)", "age_min"
+        if age_max is not None and pub < now - timedelta(days=age_max):
+            return f"업로드 {age_max}일 초과", "age_max"
     return None, None
 
 
@@ -364,14 +536,18 @@ def collect(api_key, days_oldest, days_newest, seen_meta=None):
     pb = (now - timedelta(days=days_newest)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     print(f"  검색 기간: {pa[:10]} ~ {pb[:10]} ({days_oldest}일 전 ~ {days_newest}일 전)")
-    all_ids = set()
+    # video_id → 이 영상을 발굴한 검색어 집합 (matched_queries 추적)
+    # 후보 선정 로직·dedup 로직에는 영향 없고, 리포트에 chip 표시하기 위한 어트리뷰션.
+    matched_by_id = {}
     for q in CONFIG["SEARCH_QUERIES"]:
         try:
-            ids = search_videos(api_key, q, pa, pb)
-            all_ids.update(ids)
+            pairs = search_videos(api_key, q, pa, pb)
+            for vid, matched_q in pairs:
+                matched_by_id.setdefault(vid, set()).add(matched_q)
             time.sleep(0.15)
         except Exception as e:
             print(f"  검색 실패 [{q}]: {e}")
+    all_ids = set(matched_by_id)
     print(f"  고유 ID: {len(all_ids)}개")
 
     # 중복 제외 — history에서 이미 발송된 ID 컷 (Claude 분석 비용 절감)
@@ -394,6 +570,8 @@ def collect(api_key, days_oldest, days_newest, seen_meta=None):
         m["stage"] = "dedup_excluded"
         m["status_label"] = "중복 제외"
         m["exclusion_reason"] = f"과거 발송 이력 중복 ({m.get('sent_date', '?')} 발송)"
+        # 이번 실행에서 어떤 검색어가 이 dedup 영상을 다시 발견했는지 표시
+        m["matched_queries"] = sorted(matched_by_id.get(vid, set()))
         dedup_list.append(m)
     dedup_list.sort(key=lambda x: -x.get("view_count", 0))
 
@@ -408,6 +586,8 @@ def collect(api_key, days_oldest, days_newest, seen_meta=None):
             row = parse_item(v)
         except Exception:
             continue
+        # 검색어 어트리뷰션 — 후보 선정/필터 로직에는 영향 없음, 리포트 표시 전용
+        row["matched_queries"] = sorted(matched_by_id.get(row["video_id"], set()))
         reason, dropkey = hard_filter_reason(row)
         if reason:
             drop[dropkey] += 1
@@ -439,8 +619,9 @@ ANALYSIS_SYSTEM_PROMPT = """당신은 '털어드림' K-pop Shorts 채널의 소�
 
 # 채널 정체성
 
-'털어드림'은 K-pop 연예인 중심의 시사/논란 분석형 Shorts 채널입니다. 단순 가십이나
-이슈 보도가 아니라 "이슈가 만들어낸 파장·관계·구조"를 분석적으로 다룹니다.
+'털어드림'은 K-pop 연예인 중심의 이슈·비하인드·관계성 분석형 Shorts 채널입니다.
+단순 가십이나 장면 전달이 아니라, 인물의 행동·감정·관계·산업 구조 속에서
+"왜 이런 장면이 나왔는지, 어떤 맥락이 있는지, 무엇이 반복 소비되는지"를 분석적으로 다룹니다.
 
 핵심 공식 — **시의성 지연**:
   1차 (이슈 자체)  →  2차 (반응 정리·해석형)  →  3차 (여론 분석·산업 영향)
@@ -464,8 +645,8 @@ ANALYSIS_SYSTEM_PROMPT = """당신은 '털어드림' K-pop Shorts 채널의 소�
 5. **아이돌 고충 분석**: 수면·다이어트·스케줄·건강·심리
    예: "72시간 못 자면 생기는 일", "장원영이 죽기 살기로 다이어트하는 이유"
 
-6. **세대 간 관계성**: 선배 → 후배 영향, 그룹 간 계보, 멤버 간 관계
-   예: "이채영 보고 연습한 백지헌", "성격 차이 보인다는 카리나vs윈터"
+6. **관계성·계보 분석**: 선배 → 후배 영향, 그룹 간 계보, 멤버 간 관계, 팬-아이돌 상호작용에서 반복되는 관계 패턴
+   예: "이채영 보고 연습한 백지헌", "성격 차이 보인다는 카리나vs윈터", "팬의 한마디에 예상 밖 반응을 보인 아이돌"
 
 7. **실력/논란 해설**: 안무·라이브·인성 논란의 구조적 이유
    예: "춤 때문에 또 논란 된 베이비몬스터 아현", "라이브 실력 들통난 무대"
@@ -502,9 +683,12 @@ ANALYSIS_SYSTEM_PROMPT = """당신은 '털어드림' K-pop Shorts 채널의 소�
 # 탈락 후보의 정량 패턴 (하위 30개 영상 분석)
 
 - **37%가 영어 제목** → 한국 타깃 이탈
-- **부정적/강한 훅 부재** (밋밋한 평서문 톤)
+- **강한 훅 부재** (부정적·감정적·의외성·구체성 등 시청 동기를 만드는 요소가 없는 밋밋한 평서문)
 - **특정 인물 언급 약함** (17% 수준, 상위 대비 1/3)
-- **최근 1~2개월 시의성 강한 이슈 의존** (몇 주 후 휘발)
+- 업로드 시점과 무관하게, 현재 진행 중인 이슈·단순 근황·열애설 등
+  특정 시점에만 의미가 있고 몇 주 후 가치가 사라지는 휘발성 소재 의존
+- 최근 업로드된 영상이라도 관계성·비하인드·행동 이유·반복 가능한 구조로
+  2차/3차 해석이 가능하면 탈락 사유로 보지 않음
 
 # 1군 아이돌 정의 (구체 그룹 리스트)
 
@@ -513,11 +697,11 @@ ANALYSIS_SYSTEM_PROMPT = """당신은 '털어드림' K-pop Shorts 채널의 소�
 - **HYBE**: BTS, NewJeans/NJZ, TXT, ENHYPEN, ILLIT, LE SSERAFIM, SEVENTEEN, &TEAM
 - **SM**: aespa, RIIZE, NCT(127/Dream/WayV), Red Velvet, Hearts2Hearts(하츠투하츠)
 - **YG**: BLACKPINK, BABYMONSTER, TREASURE
-- **JYP**: TWICE, ITZY, NMIXX, Stray Kids, ENHYPEN
+- **JYP**: TWICE, ITZY, NMIXX, Stray Kids
 - **기타 대중 인지도 높은 그룹**: IVE, (G)I-DLE, MAMAMOO, ATEEZ, TWS, KISS OF LIFE,
-  BOYNEXTDOOR, fromis_9, ZEROBASEONE
+  BOYNEXTDOOR, fromis_9, ZEROBASEONE, RESCENE
 - **솔로 활동으로 트렌드 1군 진입한 인물**:
-  - IZ*ONE 출신 솔로: 이채영, 장원영, 안유진
+  - IZ*ONE 출신 솔로: 최예나, 권은비, 조유리
   - **우주소녀 출신 솔로: 다영** (현 솔로 활동 중, 트렌드 폭발)
 
 이 외 무명/소형 기획사·솔로·트로트·해외 K-pop은 1군 아닌 것으로 판단.
@@ -528,6 +712,14 @@ ANALYSIS_SYSTEM_PROMPT = """당신은 '털어드림' K-pop Shorts 채널의 소�
 고려해 통과 판정하고 topic_type에 "(추정)"을 표시하세요. 동명이인 가능성 때문에
 실제 1군 인물을 컷하는 것보다, 추정으로 통과시키는 쪽이 안전합니다.
 
+**단, 제목·채널·해시태그에 그룹명 또는 소속이 명시적으로 포함된 경우, 동명이인 추정보다
+제목에 명시된 그룹·인물 정보를 우선하세요.** 예를 들어 제목에 특정 그룹명이 박혀 있고
+그 그룹이 위 1군 리스트 외라면, 동일 이름의 다른 1군 그룹 멤버로 임의 추정하여
+통과시키지 마세요. 이 경우 should_include=false로 판정하고 exclusion_reason에
+"제목 명시 그룹이 1군 리스트 외 — 동명이인 추정 금지" 취지로 기록하세요.
+(예: "미야오 안나"는 MEOVV(1군 외) 소속으로 제목에 그룹 특정이 이미 되어 있으므로,
+다른 1군 그룹의 동명 멤버로 추정해 통과시키면 안 됨.)
+
 # 분석 임무
 
 YouTube에서 발견된 후보 Shorts의 메타데이터(제목·채널·조회수·길이·업로드일)를 보고
@@ -536,7 +728,7 @@ YouTube에서 발견된 후보 Shorts의 메타데이터(제목·채널·조회�
 ## 출력 필드 정의
 
 1. **topic_type** (소재 유형): 위 8개 카테고리 중 어디에 속하는지 + 등장 인물·그룹 괄호로 부기.
-   예: "세대 간 관계성/영향 (이채영 → 백지헌)", "실력 논란 해설 (베이비몬스터 아현)"
+   예: "관계성·계보 분석 (이채영 → 백지헌)", "실력 논란 해설 (베이비몬스터 아현)"
 
 2. **title_pattern** (제목 구조): 제목을 추상화한 템플릿. 변수는 [대괄호]로.
    예: "'[선배] 보고 연습했다는 [후배]의 [특징]'", "'[원인] 때문에 또 논란 된 [인물]'"
@@ -558,13 +750,25 @@ YouTube에서 발견된 후보 Shorts의 메타데이터(제목·채널·조회�
    다음에 하나라도 해당하면 false:
    - **영어 제목** (한국 타깃 이탈, 하위 영상의 37%)
    - 직캠/풀캠/뮤비 영상 자체/무대 본방 (해설·비하인드 아님)
-   - 1~2개월 내 휘발 가십 (단순 열애설/근황 보도)
-   - 1군 아이돌이 아닌 무명·유튜버·소형 기획사 중심 (위 1군 리스트 외)
+   - 특정 시점에만 의미가 있는 휘발성 가십
+     (예: 현재 진행 중인 단순 열애설·근황 보도·당일 뉴스 전달)
+   - 콘텐츠의 주인공이 1군 아이돌이 아닌 무명 아이돌·일반 유튜버·소형 기획사 아티스트 중심 (위 1군 리스트 외)
    - 단순 짤·밈·웃긴 모음 (분석 각도 0)
-   - 자극·낚시·어그로 톤 (채널의 분석/해설형 결과 어긋남)
+
+     단, 감정 순간·리액션·팬 상호작용·유머·밈 소재라도
+     멤버 관계성, 개인 페르소나, 팬덤 문화, 반복되는 행동 패턴,
+     비하인드 맥락 중 하나 이상으로 2차 해석이 가능하면
+     단순 짤·밈으로 보지 말고, 해당 항목만을 이유로 false 판정하지 말 것.
+
+   - 자극·낚시·어그로 톤 (채널의 분석/해설형 결과와 어긋남)
    - 8가지 소재 유형 어디에도 명확히 속하지 않는 모호한 콘텐츠
-   - 부정적/구체적 훅이 전혀 없는 평서문 (하위 영상의 공통 패턴)
-   기준에 부합하면 true.
+   - 부정적·감정적·의외성·구체성 등 강한 훅이 전혀 없는 밋밋한 평서문
+
+   최근에 업로드된 영상이라는 사실 자체는 탈락 사유가 아닙니다.
+   최근 영상이라도 관계성·비하인드·행동 이유·감정 서사 등
+   시간이 지나도 재해석 가능한 구조적 각도가 있으면 통과 가능성을 검토하세요.
+
+   위 탈락 조건에 해당하지 않고 기준에 부합하면 true.
 
 8. **exclusion_reason**: should_include=false일 때 위 어느 기준에 걸렸는지
    짧은 한국어 사유 한 줄. true면 빈 문자열.
@@ -574,7 +778,7 @@ YouTube에서 발견된 후보 Shorts의 메타데이터(제목·채널·조회�
 ## Example 1
 입력: 제목 "이채영 보고 연습했다는 백지헌의 짧은치마", 채널 "나 잘한다해짜나"
 출력:
-- topic_type: "세대 간 관계성/영향 (이채영 → 백지헌)"
+- topic_type: "관계성·계보 분석 (이채영 → 백지헌)"
 - title_pattern: "'[선배] 보고 연습했다는 [후배]의 [특징]'"
 - low_timeliness_reason: "선배 아이돌 따라한 후배 구조는 매 세대마다 반복되는 장기 콘텐츠"
 - channel_fit: "명세 '관계성 shorts' 정합. 1군 인물 2명 직접 비교, 2차 해석 확장 용이"
@@ -1271,6 +1475,50 @@ html.js .nojs-only { display: none; }
 .badge-wait { color: var(--accent); background: var(--accent-bg); border: 1px solid var(--accent); }
 .badge-na { color: var(--ink-dim); background: var(--bg-subtle); }
 
+/* matched_queries chips — 이 후보를 발굴한 검색어 어트리뷰션 */
+.q-chips {
+  display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+  margin-top: 6px; font-size: 11px;
+}
+.q-chips-label {
+  color: var(--ink-dim); font-weight: 700; margin-right: 2px;
+  font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.q-chip {
+  background: var(--bg-subtle); border: 1px solid var(--border);
+  color: var(--ink); padding: 1px 8px; border-radius: 99px;
+  font-size: 10px; font-weight: 500; white-space: nowrap;
+}
+.q-chip:hover { background: #fef2f4; border-color: var(--accent); }
+
+/* 검색어 성과 요약 (상단 접이식) */
+.query-stats {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 16px; margin: 14px 0;
+}
+.query-stats summary {
+  font-size: 13px; font-weight: 700; color: var(--ink); cursor: pointer;
+  list-style: none;
+}
+.query-stats summary::before { content: '▸ '; color: var(--accent); font-weight: 900; }
+.query-stats[open] summary::before { content: '▾ '; }
+.query-stats-body { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.qs-note { font-size: 11px; color: var(--ink-dim); margin-bottom: 8px; }
+.qs-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.qs-table th {
+  text-align: left; padding: 6px 8px; font-weight: 700; color: var(--ink-light);
+  border-bottom: 1px solid var(--border); font-size: 11px;
+}
+.qs-table td {
+  padding: 5px 8px; border-bottom: 1px solid var(--border);
+  color: var(--ink);
+}
+.qs-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.qs-table tr:last-child td { border-bottom: none; }
+.qs-q { color: var(--ink); font-weight: 500; }
+.qs-n-zero { color: var(--ink-dim); }
+.qs-n-hit { font-weight: 700; color: var(--accent); }
+
 /* empty state */
 .empty-state {
   padding: 56px 24px; text-align: center; color: var(--ink-light);
@@ -1313,6 +1561,7 @@ def _render_candidate_card(i, v, data_search=""):
             <span class="chip chip-date">{v['published_at'][:10]}</span>
             <span class="chip chip-dur">{v['duration_seconds']}초</span>
           </div>
+          {_matched_queries_html(v)}
         </div>
         <div class="cand-views">
           <div><span class="cand-views-n">{fmt_views(v['view_count'])}</span><span class="cand-views-u">회</span></div>
@@ -1369,6 +1618,7 @@ def _render_excluded_card(i, v):
           <span class="chip chip-dur">{v['duration_seconds']}초</span>
           <span class="chip chip-views">{fmt_views(v['view_count'])}회</span>
         </div>
+        {_matched_queries_html(v)}
         <div class="ex-reason">
           <span class="ex-reason-label">제외 사유</span>
           <span class="ex-reason-text">{esc_html(reason)}</span>
@@ -1399,6 +1649,7 @@ def _render_waitlist_card(i, v):
           <span class="chip chip-date">{v['published_at'][:10]}</span>
           <span class="chip chip-dur">{v['duration_seconds']}초</span>
         </div>
+        {_matched_queries_html(v)}
         <div class="wl-status">
           <span class="wl-status-label">대기 사유</span>
           <span class="wl-status-text">{esc_html(status)}</span>
@@ -1408,12 +1659,15 @@ def _render_waitlist_card(i, v):
 
 
 def _si_search_text(item):
-    """리스트 아이템의 검색용 텍스트 (제목·채널·사유·분석 텍스트 전부 합침, 소문자)."""
+    """리스트 아이템의 검색용 텍스트 (제목·채널·사유·분석 텍스트·발굴 검색어 전부 합침, 소문자)."""
     parts = [item.get("title", ""), item.get("channel", ""), item.get("exclusion_reason", "")]
     a = item.get("analysis") or {}
     for k in ("topic_type", "title_pattern", "low_timeliness_reason",
               "channel_fit", "first_3sec_hook", "variation_topic", "exclusion_reason"):
         parts.append(str(a.get(k, "")))
+    # matched_queries 도 검색 대상 — 검색창에서 특정 검색어로 필터링 가능
+    for q in (item.get("matched_queries") or []):
+        parts.append(str(q))
     joined = " ".join(p for p in parts if p)
     return esc_html(joined.lower())
 
@@ -1428,6 +1682,21 @@ def _badge_html(label):
     if not label:
         return ""
     return f'<span class="badge {_BADGE_CLASS.get(label, "badge-na")}">{esc_html(label)}</span>'
+
+
+def _matched_queries_html(item):
+    """이 후보를 발굴한 검색어(들)를 작은 chip으로 렌더.
+
+    후보 선정 로직에 영향 없는 순수 어트리뷰션 표시.
+    matched_queries가 비어 있으면 빈 문자열 (예: 과거 파일에서 로드된 dedup 항목이
+    이번 실행에 재수집되지 않은 경우).
+    """
+    qs = item.get("matched_queries") or []
+    if not qs:
+        return ""
+    chips = "".join(f'<span class="q-chip">{esc_html(q)}</span>' for q in qs)
+    return (f'<div class="q-chips" title="이 후보를 발굴한 검색어">'
+            f'<span class="q-chips-label">검색어</span>{chips}</div>')
 
 
 def _render_si_row(i, item):
@@ -1451,6 +1720,7 @@ def _render_si_row(i, item):
           <span class="chip chip-dur">{item.get('duration_seconds', 0)}초</span>
           {_badge_html(status)}
         </div>
+        {_matched_queries_html(item)}
         {reason_html}
       </div>
       <div class="si-views">
@@ -1459,10 +1729,75 @@ def _render_si_row(i, item):
     </div>"""
 
 
+def _build_query_stats(stage_data):
+    """query별 collected/hard_passed/final 카운트를 집계.
+
+    각 stage의 후보들에서 matched_queries를 훑어 query별로 카운트.
+    하드코딩/인덱스 슬라이싱 없이 발굴 데이터 그 자체만 사용 — 검색어가 추가·삭제돼도
+    자동으로 정확히 동기화됨.
+    """
+    from collections import Counter
+    def count_by_q(items):
+        c = Counter()
+        for it in (items or []):
+            for q in (it.get("matched_queries") or []):
+                c[q] += 1
+        return c
+    coll = count_by_q(stage_data.get("collected"))
+    hard = count_by_q(stage_data.get("hard_passed"))
+    final = count_by_q(stage_data.get("final"))
+    all_qs = set(coll) | set(hard) | set(final)
+    rows = []
+    for q in all_qs:
+        rows.append({
+            "query": q,
+            "collected": coll.get(q, 0),
+            "hard_passed": hard.get(q, 0),
+            "final": final.get(q, 0),
+        })
+    # 최종 발송 기여 큰 순 → Hard 통과 → 수집 → 알파벳
+    rows.sort(key=lambda r: (-r["final"], -r["hard_passed"], -r["collected"], r["query"]))
+    return rows
+
+
+def _render_query_stats_details(stage_data):
+    """검색어 성과 요약 <details> 블록 (상단 접이식). query별 개별 표 렌더."""
+    rows = _build_query_stats(stage_data)
+    if not rows:
+        return ""
+    trs = []
+    for r in rows:
+        f_cls = "qs-n-hit" if r["final"] > 0 else "qs-n-zero"
+        h_cls = "qs-n-hit" if r["hard_passed"] > 0 else "qs-n-zero"
+        c_cls = "qs-n-hit" if r["collected"] > 0 else "qs-n-zero"
+        trs.append(
+            f'<tr><td class="qs-q">{esc_html(r["query"])}</td>'
+            f'<td class="num {c_cls}">{r["collected"]}</td>'
+            f'<td class="num {h_cls}">{r["hard_passed"]}</td>'
+            f'<td class="num {f_cls}">{r["final"]}</td></tr>'
+        )
+    return f"""
+  <details class="query-stats">
+    <summary>검색어 성과 요약 (query별 개별 집계 · {len(rows)}개 검색어에서 후보 발굴)</summary>
+    <div class="query-stats-body">
+      <div class="qs-note">각 검색어가 이번 실행에서 몇 개의 후보를 발굴했는지 · 몇 개가 Hard 통과했는지 · 몇 개가 최종 발송에 진입했는지. 그룹 분류/인덱스 하드코딩 없이 실제 발굴 데이터만 사용.</div>
+      <table class="qs-table">
+        <thead>
+          <tr><th>검색어</th><th class="num">수집</th><th class="num">Hard 통과</th><th class="num">최종</th></tr>
+        </thead>
+        <tbody>
+          {"".join(trs)}
+        </tbody>
+      </table>
+    </div>
+  </details>
+"""
+
+
 # 탭 메타데이터: (stage_key, 라벨, stat 숫자 키, 패널 제목, 패널 설명)
 _STAGE_TABS = [
     ("collected", "수집한 영상", "total_collected", "수집한 영상 전체",
-     "22개 검색어로 수집한 raw 후보 전체. 각 항목에 최종 단계 badge가 표시됩니다."),
+     "{n_queries}개 검색어로 수집한 raw 후보 전체. 각 항목에 최종 단계 badge가 표시됩니다."),
     ("dedup_excluded", "중복 제외", "dedup_excluded", "중복 제외 (과거 발송 이력)",
      "과거에 이미 메일로 발송한 적이 있어 자동 제외된 영상. 매주 신선한 후보 보장을 위한 dedup."),
     ("hard_excluded", "자동 필터 컷", "hard_filter_excluded", "자동 필터 컷 (Hard Filter)",
@@ -1472,7 +1807,7 @@ _STAGE_TABS = [
     ("soft_excluded", "AI 컷", "soft_filter_excluded", "AI 큐레이션 컷 (Soft Filter)",
      "Hard는 통과했지만 Claude가 채널 톤과 어긋난다고 판정한 후보. 제외 사유 표시."),
     ("final", "최종 발송", "final_count", "최종 발송 후보",
-     "큐레이션 최종 통과 — 메일로 발송된 후보. 각 영상별 6개 분석 필드 + 변형 주제 첨부."),
+     "큐레이션 최종 통과 — 메일로 발송된 후보. 각 영상별 8개 필드 (분석 6개 + 채택 여부 + 탈락 사유) + 변형 주제 첨부."),
 ]
 
 
@@ -1510,8 +1845,14 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlis
             f'<div class="stat-n">{n}</div><div class="stat-k">{label}</div></button>'
         )
 
+    # ── 검색어 성과 요약 (query별 개별 집계, 그룹 분류/인덱스 하드코딩 없음) ──
+    query_stats_html = _render_query_stats_details(stage_data)
+
     # ── 6개 패널 (more-btn은 리스트 아래) ──
+    # pdesc에 {n_queries} 같은 플레이스홀더가 들어 있을 수 있어 render 시점에 포맷팅.
+    # (SEARCH_QUERIES 개수 변경 시 자동 반영 — 하드코딩 회피)
     panels = []
+    n_queries = len(CONFIG['SEARCH_QUERIES'])
     for key, label, statkey, ptitle, pdesc in _STAGE_TABS:
         items = stage_data.get(key, [])
         if not items:
@@ -1524,11 +1865,15 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlis
             rows = "".join(_render_si_row(i, v) for i, v in enumerate(items, 1))
             body = f'<div class="stage-list">{rows}</div>'
         hidden = "" if key == "final" else " is-hidden"
+        try:
+            pdesc_rendered = pdesc.format(n_queries=n_queries)
+        except (KeyError, IndexError):
+            pdesc_rendered = pdesc  # 플레이스홀더 없으면 그대로
         panels.append(
             f'<div class="stage-panel{hidden}" data-stage="{key}">'
             f'<div class="stage-panel-head"><h2>{esc_html(ptitle)}</h2>'
             f'<span class="cnt">총 {len(items)}개</span></div>'
-            f'<p class="stage-panel-desc">{esc_html(pdesc)}</p>'
+            f'<p class="stage-panel-desc">{esc_html(pdesc_rendered)}</p>'
             f'{body}'
             f'<button class="more-btn is-hidden" type="button">더보기</button>'
             f'</div>'
@@ -1539,12 +1884,12 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlis
 <base target="_blank">
 <title>털어드림 · K-pop Shorts 소싱 리포트 {today_label}</title>
 <style>{REPORT_CSS}</style>
-</head><body><div class="page">
+</head><body><div class="page wk-root" data-report="weekly">
   <section class="hero">
     <div class="eyebrow">Channel Sourcing Report · {today_label}</div>
     <h1>털어드림 채널<br><em>K-pop Shorts</em> 후보 분석</h1>
     <p class="lead">
-      YouTube Data API v3 기반 메타데이터 전수 검증. <b>22개 검색어</b>로 수집한 후보를 분석합니다.
+      YouTube Data API v3 기반 메타데이터 전수 검증. <b>{len(CONFIG['SEARCH_QUERIES'])}개 검색어</b>로 수집한 후보를 분석합니다.
       <span class="js-only"><b>상단 카드를 클릭</b>하면 각 단계별 영상 리스트를 볼 수 있습니다.</span>
       <span class="nojs-only">전체 단계별 리스트·검색 기능은 PC 브라우저(또는 파일 다운로드 후 모바일 브라우저)에서 확인할 수 있습니다.</span>
     </p>
@@ -1555,7 +1900,7 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlis
       <span>Source<b>YouTube Data API</b></span>
       <span>Fetched<b>{fetched}</b></span>
       <span>Queries<b>{len(CONFIG['SEARCH_QUERIES'])}</b></span>
-      <span>Range<b>{esc_html(str(meta.get('lookback_days', '')))}</b></span>
+      <span>Range<b>{esc_html(_display_age_range())}</b></span>
     </div>
   </section>
 
@@ -1572,7 +1917,7 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlis
           <li><b>조회수</b> {CONFIG['MIN_VIEWS']//10000:,}만 이상 ~ {CONFIG['MAX_VIEWS']//10000:,}만 미만</li>
           <li><b>길이</b> Shorts 형식 ({CONFIG['MAX_DURATION_SEC']}초 이하)</li>
           <li><b>언어</b> 한국어 제목 (한글 포함)</li>
-          <li><b>업로드 기간</b> {CONFIG['LOOKBACK_DAYS_OLDEST']//30}개월 이내 (업로드 직후 ~ 1년 전)</li>
+          <li><b>업로드 기간</b> {_display_age_range()}</li>
           <li><b>중복 제외</b> 과거 발송 영상 자동 dedup (history 기반)</li>
           <li><b>채널 블록</b> {', '.join(sorted(CONFIG['CHANNEL_BLOCKLIST'])) or '(없음)'}</li>
           <li><b>키워드 블록</b> {', '.join(f'<code>{esc_html(k)}</code>' for k in CONFIG['TITLE_KEYWORD_BLOCKLIST'])}</li>
@@ -1585,28 +1930,31 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlis
           <span class="meta">AI 분석</span>
         </div>
         <ul class="criteria-list">
-          <li><b>직캠/뮤비/무대 영상 그 자체</b> — 해설·비하인드가 아닌 본방 영상</li>
-          <li><b>시의성 강한 소재</b> — 가십·근황·열애설 등 일주일 내 휘발</li>
-          <li><b>무명/유튜버 중심</b> — 1군 아이돌이 주체가 아닌 콘텐츠</li>
-          <li><b>단순 짤·밈·웃긴 모음</b> — 분석 각도 없는 영상</li>
-          <li><b>자극·낚시 톤</b> — 분석/해설형이라는 채널 결과 어긋나는 콘텐츠</li>
-          <li style="color:var(--ink-light);font-size:11px;border-top:1px solid var(--border);margin-top:8px;padding-top:10px;"><b style="color:var(--ink-light);">출력</b> 후보별 6개 분석 필드 + 채택/탈락 + 사유</li>
+          <li><b>본방 영상 자체</b> — 직캠·풀캠·뮤비·무대 본방처럼 해설이나 비하인드가 없는 영상</li>
+          <li><b>휘발성 가십</b> — 업로드 시점과 무관하게 특정 시점에만 의미가 있고 몇 주 후 가치가 사라지는 소재 (최근 업로드 자체는 탈락 사유 아님)</li>
+          <li><b>타깃 인물 부정합</b> — 콘텐츠의 주인공이 1군 아이돌이 아닌 무명 아이돌·일반 유튜버·소형 기획사 아티스트 중심</li>
+          <li><b>단순 짤·밈·모음</b> — 분석 각도가 전혀 없는 영상. 단 관계성·페르소나·팬덤 문화·반복 행동 패턴·비하인드 맥락으로 2차 해석 가능하면 자동 탈락 아님</li>
+          <li><b>자극·낚시 톤</b> — 채널의 분석·해설형 결과와 어긋나는 콘텐츠</li>
+          <li><b>강한 훅 부재</b> — 부정적·감정적·의외성·구체성 등 시청 동기를 만드는 요소가 전혀 없는 밋밋한 평서문</li>
+          <li style="color:var(--ink-light);font-size:11px;border-top:1px solid var(--border);margin-top:8px;padding-top:10px;"><b style="color:var(--ink-light);">출력</b> 후보별 8개 필드 — 분석 6개 + 채택 여부 + 탈락 사유</li>
         </ul>
       </div>
     </div>
   </details>
 
-  <div class="stats" id="statTabs">
+  <div class="stats" id="wkStatTabs">
     {''.join(stat_cards)}
   </div>
 
+  {query_stats_html}
+
   <div class="search-bar">
-    <input type="text" id="searchInput" class="search-input"
+    <input type="text" id="wkSearchInput" class="search-input"
            placeholder="현재 선택한 리스트에서 제목·채널·키워드 검색" autocomplete="off">
-    <span class="search-count" id="searchCount"></span>
+    <span class="search-count" id="wkSearchCount"></span>
   </div>
 
-  <div id="panelWrap">
+  <div id="wkPanelWrap">
     {''.join(panels)}
   </div>
 
@@ -1619,11 +1967,16 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlis
 (function() {{
   // JS 작동 환경 표시 → CSS가 탭/검색 UI를 노출 (JS 없으면 최종 발송만 보임)
   document.documentElement.classList.add('js');
+  // 통합 shell에서 여러 report가 함께 있을 때 서로 간섭하지 않도록 root scope로 격리.
+  // currentScript.closest로 자기 자신을 감싼 wk-root를 찾고, 없으면 첫 번째 wk-root fallback.
+  var root = (document.currentScript && document.currentScript.closest('.wk-root'))
+             || document.querySelector('.wk-root')
+             || document.body;
   var INITIAL = 30, STEP = 50;
-  var tabs = document.querySelectorAll('#statTabs .stat');
-  var panels = document.querySelectorAll('.stage-panel');
-  var searchInput = document.getElementById('searchInput');
-  var searchCount = document.getElementById('searchCount');
+  var tabs = root.querySelectorAll('#wkStatTabs .stat');
+  var panels = root.querySelectorAll('.stage-panel');
+  var searchInput = root.querySelector('#wkSearchInput');
+  var searchCount = root.querySelector('#wkSearchCount');
   var shownLimit = {{}};  // stage -> 현재 표시 개수 한도
 
   function activePanel() {{
@@ -1837,7 +2190,7 @@ def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None,
         최근 <b style="color:#0a0a0a;">1년</b> 풀 · 과거 발송 자동 중복 제외 ·
         조회수 <b style="color:#0a0a0a;">{CONFIG['MIN_VIEWS']//10000:,}만~{CONFIG['MAX_VIEWS']//10000:,}만</b> ·
         한국어 · Shorts · Claude 큐레이션 통과 <b style="color:#0a0a0a;">{len(top)}개</b>.
-        <br>상세 분석(6개 필드)은 첨부 HTML 참조.
+        <br>상세 분석(8개 필드 — 분석 6개 + 채택 여부 + 탈락 사유)은 첨부 HTML 참조.
       </p>
     </td></tr>
 
@@ -1861,7 +2214,7 @@ def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None,
               조회수 <b>{CONFIG['MIN_VIEWS']//10000:,}만~{CONFIG['MAX_VIEWS']//10000:,}만</b> ·
               Shorts(<b>{CONFIG['MAX_DURATION_SEC']}초</b>) ·
               한국어 ·
-              <b>{CONFIG['LOOKBACK_DAYS_OLDEST']//30}개월 이내</b> 영상 (업로드 직후 포함) ·
+              업로드 <b>{_display_age_range()}</b> ·
               과거 발송 자동 중복 제외 ·
               직캠/풀캠/열애설/뮤비 메이킹 등 키워드 차단
             </div>
@@ -1872,12 +2225,13 @@ def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None,
               <b style="font-size:13px;color:#0a0a0a;margin-left:8px;">Claude 큐레이션 판정</b>
             </div>
             <div style="font-size:11px;color:#444;line-height:1.7;">
-              직캠·뮤비·무대 자체 컷 ·
-              시의성 강한 가십/근황 컷 ·
-              무명 채널 컷 ·
-              단순 짤·밈 컷 ·
+              본방 영상 자체 컷 ·
+              휘발성 가십 컷 (특정 시점에만 유효한 소재. 최근 업로드 자체는 탈락 아님) ·
+              1군 부정합 컷 ·
+              분석 각도 0인 짤·밈 컷 (관계성·페르소나·팬덤 해석 가능 시 예외) ·
               자극·낚시 톤 컷 ·
-              분석/해설형 비하인드 톤만 채택
+              강한 훅 없는 평서문 컷 ·
+              분석/해설형 톤 채택
             </div>
           </td>
         </tr>
@@ -2001,15 +2355,17 @@ def _render_email_excluded_section(soft_excluded):
     </td></tr>"""
 
 
-def parse_recipients(value):
-    """RECIPIENT_EMAIL을 쉼표/세미콜론/공백으로 분리해 리스트 반환.
+from emailer import (  # SMTP 로직은 공용 모듈로 이관 — 여기서는 재-export만
+    parse_recipients,
+    build_email_message as _build_email_message,
+    send_email,
+    send_error_email as _emailer_send_error_email,
+)
 
-    예: "a@x.com, b@y.com; c@z.com" → ["a@x.com", "b@y.com", "c@z.com"]
-    """
-    if not value:
-        return []
-    parts = re.split(r"[,;\s]+", value.strip())
-    return [p for p in parts if p and "@" in p]
+
+def send_error_email(env, error_msg):
+    """weekly 전용 에러 알림 래퍼 (제목만 기존 문구 유지)."""
+    _emailer_send_error_email(env, error_msg, subject="[털어드림 자동화] ❌ 주간 잡 실행 실패")
 
 
 def _load_extra_attachment():
@@ -2043,83 +2399,23 @@ def _load_extra_attachment():
     return [(p.name, content)]
 
 
-def _build_email_message(env, subject, html_body,
-                         attachment_html, attachment_filename,
-                         extra_attachments=None):
-    """MIME 메시지 객체를 구성 (SMTP 발송은 안 함). 단위 테스트 가능하도록 분리.
-
-    extra_attachments: [(filename, content_str_or_bytes), ...] 또는 None
-    반환: (MIMEMultipart msg, recipients list)
-    """
-    recipients = parse_recipients(env["RECIPIENT_EMAIL"])
-    if not recipients:
-        raise ValueError(f"RECIPIENT_EMAIL에 유효한 주소가 없습니다: {env['RECIPIENT_EMAIL']!r}")
-
-    msg = MIMEMultipart("mixed")
-    msg["Subject"] = subject
-    msg["From"] = formataddr(("털어드림 자동화", env["GMAIL_ADDRESS"]))
-    msg["To"] = ", ".join(recipients)
-
-    body = MIMEMultipart("alternative")
-    body.attach(MIMEText(html_body, "html", "utf-8"))
-    msg.attach(body)
-
-    # 기본 첨부 (주간 후보 리포트)
-    attach = MIMEApplication(attachment_html.encode("utf-8"), _subtype="html")
-    attach.add_header("Content-Disposition", "attachment", filename=attachment_filename)
-    msg.attach(attach)
-
-    # 추가 첨부 (선택 — benchmark 등). 실패해도 weekly 발송 자체는 막지 않도록
-    # 호출 전에 _load_extra_attachment() 단계에서 이미 필터링됨
-    if extra_attachments:
-        for fn, content in extra_attachments:
-            data = content.encode("utf-8") if isinstance(content, str) else content
-            ex = MIMEApplication(data, _subtype="html")
-            ex.add_header("Content-Disposition", "attachment", filename=fn)
-            msg.attach(ex)
-
-    return msg, recipients
-
-
-def send_email(env, subject, html_body, attachment_html, attachment_filename,
-               extra_attachments=None):
-    msg, recipients = _build_email_message(
-        env, subject, html_body, attachment_html, attachment_filename,
-        extra_attachments=extra_attachments,
-    )
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:
-        s.login(env["GMAIL_ADDRESS"], env["GMAIL_APP_PASSWORD"])
-        s.sendmail(env["GMAIL_ADDRESS"], recipients, msg.as_string())
-
-
-def send_error_email(env, error_msg):
-    """에러 발생 시 RECIPIENT_EMAIL로 알림. 메일 자체가 실패하면 그냥 패스."""
-    try:
-        recipients = parse_recipients(env["RECIPIENT_EMAIL"])
-        if not recipients:
-            return
-        msg = MIMEMultipart()
-        msg["Subject"] = "[털어드림 자동화] ❌ 주간 잡 실행 실패"
-        msg["From"] = formataddr(("털어드림 자동화", env["GMAIL_ADDRESS"]))
-        msg["To"] = ", ".join(recipients)
-        msg.attach(MIMEText(error_msg, "plain", "utf-8"))
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:
-            s.login(env["GMAIL_ADDRESS"], env["GMAIL_APP_PASSWORD"])
-            s.sendmail(env["GMAIL_ADDRESS"], recipients, msg.as_string())
-    except Exception as e:
-        print(f"에러 메일 발송 자체 실패: {e}", file=sys.stderr)
-
-
 # ============================================================================
 # 메인
 # ============================================================================
 def main():
     log_path = setup_file_logging()
     env = load_env()
+    # WEEKLY_PROFILE env 반영 (default = "standard", backward compat)
+    _apply_weekly_profile(os.environ.get("WEEKLY_PROFILE", "").strip().lower() or "standard")
     today_kst = datetime.now(KST)
     today_label = today_kst.strftime("%Y-%m-%d (%a)")
     date_slug = today_kst.strftime("%Y-%m-%d")
-    arc_path = HISTORY_DIR / f"{date_slug}.json"
+    # history 파일명: standard는 기존 이름 그대로, recent는 _recent 접미사.
+    # → RESEND_LATEST의 `re.fullmatch(YYYY-MM-DD)` 조건이 자동으로 recent 파일을 제외함.
+    # → load_seen_video_meta는 두 형식 모두 로드하므로 cross-profile dedup 자동 성립.
+    _profile = CONFIG.get("_PROFILE", "standard")
+    arc_path = (HISTORY_DIR / f"{date_slug}.json") if _profile == "standard" \
+        else (HISTORY_DIR / f"{date_slug}_{_profile}.json")
 
     # 옵션: 오늘 history JSON이 이미 있으면 분석 스킵 (디버깅·메일 재발송용)
     # 강제 재분석: $env:FORCE_RESCAN="1" 또는 .env에 FORCE_RESCAN=1
@@ -2128,8 +2424,19 @@ def main():
     dry_run = os.environ.get("DRY_RUN", "").strip().lower() in ("1", "true", "yes")
     # RESEND_LATEST: 가장 최근 history를 수집·분석 없이 메일만 재발송
     resend_latest = os.environ.get("RESEND_LATEST", "").strip().lower() in ("1", "true", "yes")
+    # SEND_EMAIL_DISABLED: 메일 발송만 스킵 (history 저장·파이프라인은 정상)
+    # → send_report.py orchestrator가 weekly를 하위 실행할 때 사용
+    send_email_disabled = os.environ.get("SEND_EMAIL_DISABLED", "").strip().lower() in ("1", "true", "yes")
+    # REPORT_FRAGMENT_PATH: 파이프라인 완료 후 리포트 HTML을 이 경로에 저장 (발송/history와 무관)
+    # → orchestrator가 이 파일을 읽어 통합 shell에 조립
+    report_fragment_path = (os.environ.get("REPORT_FRAGMENT_PATH") or "").strip()
 
-    report_data_path = LOCAL_OUTPUT_DIR / f"report_data_{date_slug}.json"
+    # DRY_RUN 재렌더 캐시 — profile별로 분리 (같은 날 standard/recent가 서로 오염 X)
+    # backward compat: standard 기존 파일명 유지, recent만 접미사 추가.
+    if _profile == "standard":
+        report_data_path = LOCAL_OUTPUT_DIR / f"report_data_{date_slug}.json"
+    else:
+        report_data_path = LOCAL_OUTPUT_DIR / f"report_data_{date_slug}_{_profile}.json"
 
     print("=" * 60)
     print("털어드림 주간 후보 자동 수집 시작")
@@ -2139,6 +2446,10 @@ def main():
         print("⚠️  DRY_RUN 모드 — 메일 발송 안 함 / history 미변경")
     if resend_latest:
         print("📨 RESEND_LATEST 모드 — 최신 history 메일만 재발송 (수집·분석 없음)")
+    if send_email_disabled:
+        print("📭 SEND_EMAIL_DISABLED — 메일 발송 스킵 (history는 정상 저장)")
+    if report_fragment_path:
+        print(f"📄 REPORT_FRAGMENT_PATH — fragment 저장: {report_fragment_path}")
     print("=" * 60)
 
     try:
@@ -2174,9 +2485,12 @@ def main():
         # ============================================================
         # DRY_RUN 재렌더 캐시: 같은 날 report_data 캐시 있으면 파이프라인 스킵
         # ============================================================
-        elif dry_run and report_data_path.exists() and not force_rescan:
+        elif dry_run and report_data_path.exists() and not force_rescan \
+                and _cache_matches_profile(report_data_path, _profile):
+            # 파일명이 이미 profile-aware이지만 이중 방어: bundle 안의 _profile 필드도 확인.
+            # (예: 이전 버전이 저장한 캐시가 profile 필드 없이 남아 있는 경우 안전 처리)
             print(f"\n[DRY_RUN] report_data 캐시 발견 → 파이프라인 스킵, HTML만 재생성")
-            print(f"  파일: {report_data_path.relative_to(ROOT)}")
+            print(f"  파일: {report_data_path.relative_to(ROOT)}  (profile={_profile})")
             print(f"  💡 새로 수집하려면: $env:FORCE_RESCAN=\"1\" 추가")
             bundle = json.loads(report_data_path.read_text(encoding="utf-8"))
             print(f"  로드: 최종 {len(bundle['top'])}개, "
@@ -2322,12 +2636,29 @@ def main():
                   f"({len(extra_attachments[0][1]):,} bytes)")
 
         # ============================================================
+        # REPORT_FRAGMENT_PATH: fragment 저장 (발송/history 여부와 무관)
+        # → orchestrator(send_report.py)가 통합 shell에 조립할 원본
+        # ============================================================
+        if report_fragment_path:
+            frag_p = Path(report_fragment_path)
+            frag_p.parent.mkdir(parents=True, exist_ok=True)
+            fragment_html = render_standalone_report(
+                top, meta, today_label,
+                soft_excluded_list, waitlist, report_lists,
+            )
+            frag_p.write_text(fragment_html, encoding="utf-8")
+            print(f"  📄 fragment 저장: {frag_p} ({len(fragment_html):,} bytes)")
+
+        # ============================================================
         # DRY_RUN: 메일 발송 안 함, history 미변경, preview만 저장
         # ============================================================
         if dry_run:
             LOCAL_OUTPUT_DIR.mkdir(exist_ok=True)
+            # 캐시 bundle에 _profile 태그 저장 — 다음 DRY_RUN에서 mismatch 감지용
+            _cache_bundle = dict(bundle)
+            _cache_bundle["_profile"] = _profile
             report_data_path.write_text(
-                json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8")
+                json.dumps(_cache_bundle, ensure_ascii=False, indent=2), encoding="utf-8")
             preview_path = LOCAL_OUTPUT_DIR / f"preview_{date_slug}.html"
             preview_path.write_text(
                 render_standalone_report(top, meta, today_label,
@@ -2363,12 +2694,15 @@ def main():
             print(f"\n[STEP 5] history 아카이브")
             archive = {
                 "date_kst": date_slug,
+                "profile": CONFIG.get("_PROFILE", "standard"),
                 "generated_at_utc": datetime.now(timezone.utc).isoformat(),
                 "config": {
                     "min_views": CONFIG["MIN_VIEWS"],
                     "max_views": CONFIG["MAX_VIEWS"],
                     "max_duration_seconds": CONFIG["MAX_DURATION_SEC"],
                     "lookback_days_used": lookback_used,
+                    "min_age_days_exclusive": CONFIG.get("MIN_AGE_DAYS_EXCLUSIVE"),
+                    "uploaded_within_days": CONFIG.get("UPLOADED_WITHIN_DAYS"),
                 },
                 "stats": meta,
                 "candidates": top,
@@ -2379,7 +2713,15 @@ def main():
             arc_path.write_text(json.dumps(archive, ensure_ascii=False, indent=2), encoding="utf-8")
             print(f"  ✅ {arc_path.relative_to(ROOT)}")
 
-        # 메일 발송
+        # 메일 발송 (SEND_EMAIL_DISABLED 이면 스킵)
+        if send_email_disabled:
+            print(f"\n[STEP 4] 메일 발송 스킵 (SEND_EMAIL_DISABLED=1)")
+            print(f"  ↳ history 저장은 정상 완료 (dedup 근거 유지)")
+            print("\n" + "=" * 60)
+            print(f"완료: 최종 {len(top)}개 (발송 스킵, {lookback_used} 기준)")
+            print("=" * 60)
+            return
+
         print(f"\n[STEP 4] 메일 발송 → {env['RECIPIENT_EMAIL']}")
         send_email(
             env,

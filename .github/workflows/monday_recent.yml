@@ -1,0 +1,107 @@
+name: 털어드림 최근 콘텐츠 리포트 (매주 월요일)
+
+# 매주 월요일 08:42 KST = 매주 일요일 23:42 UTC
+# recent 프로파일 (조회수 10만~100만, NEWEST 정렬) 로 4채널 최근 콘텐츠 발굴
+on:
+  schedule:
+    - cron: '42 23 * * 0'   # 일요일 23:42 UTC = 월요일 08:42 KST
+  workflow_dispatch:
+
+# weekly.yml, resend.yml과 서로 다른 concurrency group — 필요 시 병렬 가능.
+# 다만 sent history commit race 방지 위해 pull --rebase 사용.
+concurrency:
+  group: monday-recent
+  cancel-in-progress: false
+
+jobs:
+  send-monday-recent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: write   # benchmark/history/sent/ 커밋 권한
+
+    steps:
+      - name: 레포 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 의존성 설치
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ============================================================
+      # 시크릿 사전 검증
+      # → Monday 통합 리포트는 Weekly recent + Benchmark recent 함께 실행하므로
+      #   YOUTUBE_API_KEY (Weekly)와 APIFY_TOKEN (Benchmark) 모두 필수
+      # ============================================================
+      - name: 시크릿 사전 검증
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+        run: |
+          set -e
+          fail=0
+          check() {
+            if [ "$2" -eq 0 ]; then echo "❌ $1: 등록 안 됨"; fail=1
+            else echo "✅ $1: 등록됨 (길이 $2)"; fi
+          }
+          check YOUTUBE_API_KEY ${#YOUTUBE_API_KEY}
+          check APIFY_TOKEN ${#APIFY_TOKEN}
+          check ANTHROPIC_API_KEY ${#ANTHROPIC_API_KEY}
+          check GMAIL_ADDRESS ${#GMAIL_ADDRESS}
+          check GMAIL_APP_PASSWORD ${#GMAIL_APP_PASSWORD}
+          check RECIPIENT_EMAIL ${#RECIPIENT_EMAIL}
+          if [ $fail -eq 1 ]; then
+            echo "👉 Settings → Secrets에서 위 시크릿을 확인하세요."
+            exit 1
+          fi
+
+      # ============================================================
+      # orchestrator 실행 — mode=monday
+      # 내부: benchmark(PROFILE=recent) + weekly(WEEKLY_PROFILE=recent) 통합 shell
+      # → 발송 성공 후:
+      #     · benchmark/history/sent/YYYY-MM-DD_recent.json 자동 생성 (recent dedup 근거)
+      #     · history/YYYY-MM-DD_recent.json 자동 생성 (Weekly cross-profile dedup 근거)
+      # ============================================================
+      - name: 오케스트레이터 실행 (mode=monday)
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+          PYTHONUNBUFFERED: '1'
+        run: python scripts/send_report.py --mode=monday
+
+      # ============================================================
+      # history 커밋 — Weekly recent history + benchmark 공용 sent history
+      # → 발송 실패 시 각 파일 생성 자체가 안 됨. add 대상 없으면 조용히 pass.
+      # → recent 파일명은 `YYYY-MM-DD_recent.json` 형식 (standard의 RESEND_LATEST에는 자동 제외됨).
+      # ============================================================
+      - name: history 커밋
+        run: |
+          git config user.name "teoldeurim-bot"
+          git config user.email "actions@github.com"
+          # 다른 workflow가 push한 커밋을 먼저 반영 (race 방지)
+          git pull --rebase --autostash
+          git add history/ 2>/dev/null || true
+          git add benchmark/history/sent/ 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "신규 history 파일 없음 (커밋 생략)"
+          else
+            today=$(TZ=Asia/Seoul date +%Y-%m-%d)
+            git commit -m "history: ${today} Monday recent 리포트 (weekly + benchmark)"
+            git push
+            echo "✅ 커밋 완료"
+          fi
