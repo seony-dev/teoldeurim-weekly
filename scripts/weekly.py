@@ -37,7 +37,8 @@ CONFIG = {
     "MIN_VIEWS": 500_000,           # 100만 이상 → 50만 이상 (26.07.13 변경)
     "MAX_VIEWS": 9_000_000,         # 500만 → 900만으로 상향 (26.07.14, Friday 통합 리포트에서
                                     # Benchmark standard(50만~900만)와 조건 통일)
-    "MAX_DURATION_SEC": 180,
+    "MAX_DURATION_SEC": 180,        # Shorts 길이 상한
+    "MIN_DURATION_SEC": 15,         # 15초 미만 초단타 영상 제외 (26.07.15, 대표님 요청)
     # YouTube API pull 범위 — 실제 최종 판정은 아래 MIN_AGE / UPLOADED_WITHIN_DAYS
     # 기반 로컬 timestamp 필터. API는 경계 누락 방지 buffer(약 1일) 포함 넉넉하게 pull.
     # standard 최종 목표: 30일 초과 ~ 365일 → API pull: 29~366일 (±1일 buffer)
@@ -495,8 +496,14 @@ def hard_filter_reason(row):
     if v >= CONFIG["MAX_VIEWS"]:
         return f"조회수 {CONFIG['MAX_VIEWS']//10000}만 이상 ({v:,}회)", "max_views"
     d = row["duration_seconds"]
-    if not (0 < d <= CONFIG["MAX_DURATION_SEC"]):
-        return f"Shorts 길이 초과 ({d}초 / 제한 {CONFIG['MAX_DURATION_SEC']}초)", "duration"
+    max_dur = CONFIG["MAX_DURATION_SEC"]
+    min_dur = CONFIG.get("MIN_DURATION_SEC", 0)  # 26.07.15: 15초 미만 초단타 컷
+    if d <= 0:
+        return f"길이 파싱 실패 (duration_seconds={d})", "duration_parse"
+    if min_dur > 0 and d < min_dur:
+        return f"길이 {min_dur}초 미만 ({d}초)", "duration_min"
+    if d > max_dur:
+        return f"Shorts 길이 초과 ({d}초 / 제한 {max_dur}초)", "duration"
     if not has_korean(row["title"]):
         return "한국어 제목 아님", "korean"
     if row["channel"] in CONFIG["CHANNEL_BLOCKLIST"] or row["channel_id"] in CONFIG.get("CHANNEL_ID_BLOCKLIST", set()):
@@ -1915,7 +1922,7 @@ def render_standalone_report(top, meta, today_label, soft_excluded=None, waitlis
         </div>
         <ul class="criteria-list">
           <li><b>조회수</b> {CONFIG['MIN_VIEWS']//10000:,}만 이상 ~ {CONFIG['MAX_VIEWS']//10000:,}만 미만</li>
-          <li><b>길이</b> Shorts 형식 ({CONFIG['MAX_DURATION_SEC']}초 이하)</li>
+          <li><b>길이</b> Shorts 형식 ({CONFIG.get('MIN_DURATION_SEC', 0)}초 이상 ~ {CONFIG['MAX_DURATION_SEC']}초 이하)</li>
           <li><b>언어</b> 한국어 제목 (한글 포함)</li>
           <li><b>업로드 기간</b> {_display_age_range()}</li>
           <li><b>중복 제외</b> 과거 발송 영상 자동 dedup (history 기반)</li>
@@ -2212,7 +2219,7 @@ def render_email_html(top, meta, today_label, soft_excluded=None, waitlist=None,
             </div>
             <div style="font-size:11px;color:#444;line-height:1.7;">
               조회수 <b>{CONFIG['MIN_VIEWS']//10000:,}만~{CONFIG['MAX_VIEWS']//10000:,}만</b> ·
-              Shorts(<b>{CONFIG['MAX_DURATION_SEC']}초</b>) ·
+              Shorts(<b>{CONFIG.get('MIN_DURATION_SEC', 0)}~{CONFIG['MAX_DURATION_SEC']}초</b>) ·
               한국어 ·
               업로드 <b>{_display_age_range()}</b> ·
               과거 발송 자동 중복 제외 ·

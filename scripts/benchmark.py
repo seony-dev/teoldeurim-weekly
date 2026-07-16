@@ -633,6 +633,7 @@ def hard_filter(videos, now):
     """
     min_views = CFG["MIN_VIEWS"]
     max_dur = CFG["MAX_DURATION_SEC"]
+    min_dur = CFG.get("MIN_DURATION_SEC", 0)   # 26.07.15: 15초 미만 초단타 컷
     age_min = CFG.get("MIN_AGE_DAYS_EXCLUSIVE")   # None 또는 30
     age_max = CFG.get("UPLOADED_WITHIN_DAYS")     # 30 또는 365
 
@@ -641,8 +642,17 @@ def hard_filter(videos, now):
         if v["views"] < min_views:
             excluded.append((v, f"조회수 부족 ({v['views']:,})"))
             continue
-        if v["duration_sec"] > max_dur:
-            excluded.append((v, f"길이 초과 ({v['duration_sec']}초)"))
+        # duration_sec 파싱 실패 시 0 (normalize_video 반환값) → min_dur=15면 여기서 컷.
+        # 사유를 명확히 구분 (0초 = 파싱 실패, 그 외 = 실제 초단타).
+        _d = v.get("duration_sec", 0)
+        if min_dur > 0 and _d < min_dur:
+            if _d <= 0:
+                excluded.append((v, f"길이 파싱 실패 (duration_sec={_d})"))
+            else:
+                excluded.append((v, f"길이 {min_dur}초 미만 ({_d}초)"))
+            continue
+        if _d > max_dur:
+            excluded.append((v, f"길이 초과 ({_d}초)"))
             continue
         # timestamp 기반 age 판정 (source of truth)
         pub = parse_timestamp(v["published_at"])
@@ -1457,6 +1467,7 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used):
     max_views_label = _fmt_max_views(max_views)
     min_views = config_used.get("MIN_VIEWS", 0)
     max_dur = config_used.get("MAX_DURATION_SEC", 0)
+    min_dur = config_used.get("MIN_DURATION_SEC", 0)
     within_days = config_used.get("UPLOADED_WITHIN_DAYS", 0)
     # 사용자-facing 업로드 age 범위 문구 — 실제 local timestamp 필터 기준 반영.
     # (내부 API pull buffer 는 노출 안 함)
@@ -1595,7 +1606,7 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used):
     <div class="criteria">
       <ul>
         {max_views_li}
-        <li><b>길이</b> {max_dur}초 이하 (Shorts 형식)</li>
+        <li><b>길이</b> {(str(min_dur)+"초 이상 ~ ") if min_dur else ""}{max_dur}초 이하 (Shorts 형식)</li>
         <li><b>업로드</b> {age_range_label}</li>
         <li><b>중복</b> weekly 기발송 영상 자동 dedup (history 기반)</li>
         <li><b>채널</b> 제외 채널 자동 차단 (우리 채널 + blocklist)</li>
@@ -1900,6 +1911,11 @@ def main():
         "MAX_SHORTS_PER_CHANNEL": CFG.get("MAX_SHORTS_PER_CHANNEL", 0),
         "MAX_TOTAL_RAW": CFG.get("MAX_TOTAL_RAW", 0),
         "MAX_DURATION_SEC": CFG.get("MAX_DURATION_SEC", 0),
+        "MIN_DURATION_SEC": CFG.get("MIN_DURATION_SEC", 0),
+        # 업로드 age 필터 (사용자-facing "업로드 직후 ~ N일" / "M일 초과 ~ N일" 표시용).
+        # MIN_AGE_DAYS_EXCLUSIVE 는 standard=30, recent=None. 반드시 스냅샷 포함해야
+        # render_report 의 필터 기준 문구가 profile 별로 정확히 표시됨.
+        "MIN_AGE_DAYS_EXCLUSIVE": CFG.get("MIN_AGE_DAYS_EXCLUSIVE"),
         "UPLOADED_WITHIN_DAYS": CFG.get("UPLOADED_WITHIN_DAYS", 0),
         "MAX_ANALYSIS_CANDIDATES": CFG.get("MAX_ANALYSIS_CANDIDATES", 0),
         "FINAL_CANDIDATES": CFG.get("FINAL_CANDIDATES", 0),

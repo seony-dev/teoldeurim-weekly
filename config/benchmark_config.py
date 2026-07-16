@@ -91,7 +91,9 @@ BENCHMARK_CONFIG = {
     "MAX_VIEWS": 9_000_000,         # 조회수 상한 400만 → 900만으로 상향 (26.07.14)
                                     # (초대형 조회수 영상은 너무 뻔해서 후보 제외)
                                     # MAX_TOTAL_RAW 컷 이전에 적용됨 (4M 이하 후보 확보)
-    "MAX_DURATION_SEC": 180,        # Shorts 형식
+    "MAX_DURATION_SEC": 180,        # Shorts 형식 (상한)
+    "MIN_DURATION_SEC": 15,         # 15초 미만 초단타 영상 제외 (26.07.15, 대표님 요청)
+                                    # 최종 길이 조건: 15초 이상 ~ 180초 이하
     # 업로드 age 필터 — timestamp 기준 (초 단위 정확도). 정수 days_since_upload는 리포트 표시용.
     #   MIN_AGE_DAYS_EXCLUSIVE: age > N (strict, exclusive lower bound). None이면 하한 없음.
     #   UPLOADED_WITHIN_DAYS: age <= N (inclusive upper bound). None이면 상한 없음.
@@ -127,6 +129,7 @@ BENCHMARK_PROFILES = {
         "MIN_VIEWS": 500_000,
         "MAX_VIEWS": 9_000_000,
         "MAX_DURATION_SEC": 180,
+        "MIN_DURATION_SEC": 15,
         "MIN_AGE_DAYS_EXCLUSIVE": 30,     # 30일 이하는 recent 소속 → 여기서 컷
         "UPLOADED_WITHIN_DAYS": 365,      # 365일 초과 컷
         "MAX_ANALYSIS_CANDIDATES": 10,
@@ -140,6 +143,7 @@ BENCHMARK_PROFILES = {
         "MIN_VIEWS": 100_000,
         "MAX_VIEWS": 1_000_000,
         "MAX_DURATION_SEC": 180,
+        "MIN_DURATION_SEC": 15,
         # 업로드 age 범위: 0일 ≤ age ≤ 30일. 정확히 30일 timestamp도 여기 포함.
         "MIN_AGE_DAYS_EXCLUSIVE": None,   # 하한 없음 (업로드 당일 포함)
         "UPLOADED_WITHIN_DAYS": 30,       # 30일 초과 컷
