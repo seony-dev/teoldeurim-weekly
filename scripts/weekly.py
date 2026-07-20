@@ -18,6 +18,7 @@ import time
 import re
 import smtplib  # noqa: F401  (emailer.py로 이관됨. subprocess 실행 환경 진단 시 필요할 수 있어 남겨둠)
 import traceback
+from collections import Counter
 from datetime import datetime, timezone, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -587,7 +588,11 @@ def collect(api_key, days_oldest, days_newest, seen_meta=None):
 
     candidates = []
     hard_excluded = []
-    drop = {"min_views": 0, "max_views": 0, "duration": 0, "korean": 0, "channel": 0, "keyword": 0}
+    # 컷 사유 집계 — Counter 사용해 향후 신규 reason 코드가 추가돼도 KeyError 없이 안전 집계.
+    # hard_filter_reason() 이 반환할 수 있는 dropkey (2026-07-18 기준 11개):
+    #   min_views, max_views, duration_parse, duration_min, duration,
+    #   korean, channel, keyword, age_parse, age_min, age_max
+    drop = Counter()
     for v in details:
         try:
             row = parse_item(v)
@@ -605,7 +610,14 @@ def collect(api_key, days_oldest, days_newest, seen_meta=None):
         else:
             row["stage"] = "hard_passed"
             candidates.append(row)
-    print(f"  필터 탈락: 조회수↓{drop['min_views']} 조회수↑{drop['max_views']} 길이{drop['duration']} 비한국어{drop['korean']} 채널{drop['channel']} 키워드{drop['keyword']}")
+    # 로그 출력 — 모든 reason 코드를 정해진 순서로 표시 (Counter 는 미발동 코드도 0 반환).
+    print(f"  필터 탈락: "
+          f"조회수↓{drop['min_views']} 조회수↑{drop['max_views']} "
+          f"길이<{CONFIG.get('MIN_DURATION_SEC', 0)}초{drop['duration_min']} "
+          f"길이>{CONFIG['MAX_DURATION_SEC']}초{drop['duration']} "
+          f"길이파싱실패{drop['duration_parse']} "
+          f"비한국어{drop['korean']} 채널{drop['channel']} 키워드{drop['keyword']} "
+          f"age범위밖{drop['age_min']} age초과{drop['age_max']} age파싱실패{drop['age_parse']}")
 
     candidates.sort(key=lambda x: -x["view_count"])
     hard_excluded.sort(key=lambda x: -x["view_count"])
@@ -2414,9 +2426,33 @@ def main():
     env = load_env()
     # WEEKLY_PROFILE env 반영 (default = "standard", backward compat)
     _apply_weekly_profile(os.environ.get("WEEKLY_PROFILE", "").strip().lower() or "standard")
+    # 실제 실행 시각(=KST 오늘) — age 계산·generated_at·"Fetched" 표기·API 기준 시각에 사용.
+    #   REPORT_DATE가 있어도 이 값은 절대 override 되지 않는다.
     today_kst = datetime.now(KST)
-    today_label = today_kst.strftime("%Y-%m-%d (%a)")
-    date_slug = today_kst.strftime("%Y-%m-%d")
+    # ── REPORT_DATE override — 원래 발송 예정 슬롯 날짜 (파일명·헤더·subject·history date_kst용) ──
+    # 규칙: 실제 수집·age·generated_at 은 today_kst 그대로 유지.
+    #       REPORT_DATE는 리포트 slot 표기·파일 namespace 만 override.
+    _report_date_env = os.environ.get("REPORT_DATE", "").strip()
+    if _report_date_env:
+        # 엄격 YYYY-MM-DD (zero-padded, 파일명 regex 와 정합).
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", _report_date_env):
+            raise SystemExit(
+                f"❌ REPORT_DATE 형식 오류: {_report_date_env!r} — "
+                f"정확한 YYYY-MM-DD (zero-padded) 필요"
+            )
+        try:
+            _slot_dt = datetime.strptime(_report_date_env, "%Y-%m-%d")
+        except ValueError:
+            raise SystemExit(
+                f"❌ REPORT_DATE 형식 오류: {_report_date_env!r} — 존재하지 않는 날짜"
+            )
+        date_slug = _report_date_env                              # slot
+        today_label = _slot_dt.strftime("%Y-%m-%d (%a)")          # slot 요일
+        print(f"📅 REPORT_DATE={_report_date_env} 적용 — 파일·헤더·subject slot 사용 "
+              f"(실제 실행일 {today_kst.strftime('%Y-%m-%d')}은 age/generated_at에 유지)")
+    else:
+        date_slug = today_kst.strftime("%Y-%m-%d")
+        today_label = today_kst.strftime("%Y-%m-%d (%a)")
     # history 파일명: standard는 기존 이름 그대로, recent는 _recent 접미사.
     # → RESEND_LATEST의 `re.fullmatch(YYYY-MM-DD)` 조건이 자동으로 recent 파일을 제외함.
     # → load_seen_video_meta는 두 형식 모두 로드하므로 cross-profile dedup 자동 성립.

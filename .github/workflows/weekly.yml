@@ -12,6 +12,20 @@ on:
         description: '강제 재분석 (오늘자 history 무시하고 새로 수집·분석)'
         type: boolean
         default: false
+      report_date:
+        description: '(선택) 리포트 slot 날짜 override — YYYY-MM-DD. 비면 실행 당일 KST. 예: 2026-07-17 (금요일 발송 예정이었으나 놓친 날짜 재발송용). 파일명·subject·history namespace 만 이 값으로 저장되며, age 계산·수집·generated_at 은 실제 실행 시각(KST 오늘) 유지.'
+        type: string
+        required: false
+        default: ''
+      notice:
+        description: '(선택) 메일 본문 최상단 안내 문구. 리터럴 "\n" 은 개행으로 변환. HTML escape 후 안내 박스로 노출. 빈 값이면 미노출.'
+        type: string
+        required: false
+        default: ''
+      reissue:
+        description: '(선택) subject 맨 앞에 "[재발송] " 접두어 추가'
+        type: boolean
+        default: false
 
 # 동시 실행 방지
 concurrency:
@@ -114,6 +128,10 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
           FORCE_RESCAN: ${{ github.event.inputs.force_rescan == 'true' && '1' || '' }}
+          # REPORT_DATE / NOTICE / REISSUE — workflow_dispatch 로 넘어온 값. cron / 기본 실행은 모두 빈 값 → 기존 동작.
+          REPORT_DATE: ${{ github.event.inputs.report_date || '' }}
+          NOTICE: ${{ github.event.inputs.notice || '' }}
+          REISSUE: ${{ github.event.inputs.reissue == 'true' && '1' || '' }}
           PYTHONUNBUFFERED: '1'
         run: python scripts/send_report.py --mode=friday
 
@@ -124,6 +142,8 @@ jobs:
       # ============================================================
       - name: history 커밋
         if: steps.biweekly.outputs.run == '1'
+        env:
+          REPORT_DATE: ${{ github.event.inputs.report_date || '' }}
         run: |
           git config user.name "teoldeurim-bot"
           git config user.email "actions@github.com"
@@ -134,8 +154,9 @@ jobs:
           if git diff --cached --quiet; then
             echo "신규 history 파일 없음 (커밋 생략)"
           else
-            today=$(TZ=Asia/Seoul date +%Y-%m-%d)
-            git commit -m "history: ${today} 격주 통합 리포트 (weekly + benchmark)"
+            # 커밋 메시지의 slot 날짜는 REPORT_DATE 우선. 비면 KST 오늘.
+            slot="${REPORT_DATE:-$(TZ=Asia/Seoul date +%Y-%m-%d)}"
+            git commit -m "history: ${slot} 격주 통합 리포트 (weekly + benchmark)"
             git push
-            echo "✅ 커밋 완료"
+            echo "✅ 커밋 완료 (slot=${slot})"
           fi

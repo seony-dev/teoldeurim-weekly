@@ -1779,9 +1779,27 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used):
 # ============================================================================
 def main():
     load_dotenv()
+    # 실제 실행 시각(=KST 오늘) — age 계산·필터·generated_at·API 기준 시각에 사용.
+    #   REPORT_DATE가 있어도 now_kst / now_utc 는 절대 override 되지 않는다.
     now_kst = datetime.now(KST)
     now_utc = datetime.now(timezone.utc)
-    today_label = now_kst.strftime("%Y-%m-%d")
+    # ── REPORT_DATE override — 원래 발송 예정 슬롯 (파일명·리포트 헤더 slot 표기용) ──
+    _report_date_env = os.environ.get("REPORT_DATE", "").strip()
+    if _report_date_env:
+        # 엄격 YYYY-MM-DD (zero-padded)
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", _report_date_env):
+            print(f"❌ REPORT_DATE 형식 오류: {_report_date_env!r} — "
+                  f"정확한 YYYY-MM-DD (zero-padded) 필요", file=sys.stderr)
+            sys.exit(1)
+        try:
+            datetime.strptime(_report_date_env, "%Y-%m-%d")
+        except ValueError:
+            print(f"❌ REPORT_DATE 형식 오류: {_report_date_env!r} — 존재하지 않는 날짜",
+                  file=sys.stderr)
+            sys.exit(1)
+        today_label = _report_date_env   # slot — raw_path / report_path / HTML 헤더에 사용
+    else:
+        today_label = now_kst.strftime("%Y-%m-%d")
 
     # PROFILE env 반영 (default = "standard")
     profile = (os.environ.get("PROFILE") or "standard").strip().lower()

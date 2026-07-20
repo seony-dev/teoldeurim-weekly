@@ -19,6 +19,7 @@
 """
 
 import argparse
+import html as _html
 import json
 import os
 import re
@@ -56,8 +57,73 @@ def _log(msg):
     print(msg, flush=True)
 
 
+_REPORT_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _validate_report_date(value):
+    """엄격 YYYY-MM-DD 검증 (zero-padded, 10글자, 실제 존재 날짜).
+
+    통과하면 원본 문자열 반환. 실패면 SystemExit.
+    (`2026-2-3` 처럼 zero-padding 안 된 값은 파일명 regex 와 어긋나므로 거부)
+    """
+    if not _REPORT_DATE_RE.match(value):
+        raise SystemExit(
+            f"❌ REPORT_DATE 형식 오류: {value!r} — 정확한 YYYY-MM-DD (zero-padded) 필요"
+        )
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        raise SystemExit(
+            f"❌ REPORT_DATE 형식 오류: {value!r} — 존재하지 않는 날짜"
+        )
+    return value
+
+
 def _now_date_slug():
+    """리포트 slot 날짜 (파일명·subject·history namespace).
+
+    REPORT_DATE env가 있으면 그 값을 slot으로 사용 (YYYY-MM-DD 엄격 검증).
+    비어 있으면 KST 실행 당일. 실제 실행 시각·age·generated_at 과는 무관.
+    """
+    override = (os.environ.get("REPORT_DATE") or "").strip()
+    if override:
+        return _validate_report_date(override)
     return datetime.now(KST).strftime("%Y-%m-%d")
+
+
+def _notice_html(notice_raw):
+    """NOTICE env → HTML 안내 박스. 비면 빈 문자열.
+
+    안전한 처리 순서 (이 순서를 절대 뒤바꾸지 말 것 — 사용자 입력을 먼저 HTML로
+    해석하면 XSS 로 이어짐):
+
+      (1) literal '\\n' (역슬래시 + n 두 글자, workflow_dispatch string input UI 는 실제
+          개행을 못 넣으므로 이 조합으로 들어옴) → 실제 개행 문자로 정규화
+      (2) 실제 개행으로 split — 결과 line 들에는 개행이 남지 않음
+      (3) 각 line 을 html.escape 로 escape (& < > " ' 모두 이스케이프)
+      (4) 이스케이프된 각 line 을 우리 소유의 안전한 마크업 '<br>' 로 join
+
+    이 순서 덕에 우리가 삽입하는 '<br>' 는 절대 이스케이프되지 않고, 반대로
+    사용자 입력에 담긴 어떤 HTML 도 실제 태그로 해석되지 않는다.
+    """
+    if not notice_raw or not notice_raw.strip():
+        return ""
+    text = notice_raw.replace("\\n", "\n")            # (1) literal 정규화
+    lines = [_html.escape(ln) for ln in text.split("\n")]  # (2) split → (3) escape
+    body = "<br>".join(lines)                          # (4) 안전한 <br> join
+    return (
+        '<div style="background:#fff8e1;border-left:4px solid #f6b73c;'
+        'padding:12px 16px;margin:0 0 20px 0;border-radius:4px;'
+        'font-size:14px;line-height:1.6;color:#5a3a00;">'
+        f'{body}'
+        '</div>'
+    )
+
+
+def _reissue_prefix():
+    """REISSUE=truthy 이면 '[재발송] ' 반환. friday subject 에만 사용."""
+    v = (os.environ.get("REISSUE") or "").strip().lower()
+    return "[재발송] " if v in ("1", "true", "yes") else ""
 
 
 def _env_snapshot():
@@ -525,12 +591,15 @@ def _monday_body_html(date_slug, wk_count, bm_count, wk_ok, bm_ok):
 </body></html>"""
 
 
-def _friday_body_html(date_slug, wk_count, bm_count, bm_ok):
-    """금요일 통합 본문. bm_ok=False 는 benchmark 실행 자체 실패 (weekly-only fallback)."""
+def _friday_body_html(date_slug, wk_count, bm_count, bm_ok, notice_html=""):
+    """금요일 통합 본문. bm_ok=False 는 benchmark 실행 자체 실패 (weekly-only fallback).
+
+    notice_html 은 최상단에 삽입될 안내 박스 (비어 있으면 미노출).
+    """
     if not bm_ok:
         # weekly-only fallback
         return f"""<html><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
-<p>안녕하세요, 박서은입니다.</p>
+{notice_html}<p>안녕하세요, 박서은입니다.</p>
 <p><b>⚠️ 이번 실행에서 benchmark 파이프라인이 실패했습니다.</b> Weekly 후보만 확인 가능합니다.</p>
 <ul>
   <li>Weekly 후보: {wk_count}건 (YouTube 검색어 기반)</li>
@@ -552,7 +621,7 @@ def _friday_body_html(date_slug, wk_count, bm_count, bm_ok):
             f"수집·필터링·분석은 정상 완료되었습니다.</p><ul>{items}</ul>"
         )
     return f"""<html><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
-<p>안녕하세요, 박서은입니다.</p>
+{notice_html}<p>안녕하세요, 박서은입니다.</p>
 <p>이번 격주 <b>통합 리포트</b>를 첨부드립니다.</p>
 <ul>
   <li>Weekly 후보: {wk_count}건 (YouTube 검색어 기반)</li>
@@ -754,15 +823,18 @@ def run_friday(date_slug, tmp_dir, dry_run=False):
                                    wk_summary=wk_summary,
                                    bm_summary=bm_summary)
 
-    # subject: 정상 0건 vs benchmark 실패 구분
+    # subject: 정상 0건 vs benchmark 실패 구분. REISSUE=true 이면 맨 앞에 [재발송] 붙임.
     if not bm_ok:
         subject = f"[털어드림 격주 후보] {date_slug} · Weekly {wk_count}건 (⚠️ benchmark 실패)"
     elif wk_count == 0 and bm_count == 0:
         subject = f"[털어드림 격주 후보] {date_slug} · 신규 후보 없음 (Weekly 0 / Benchmark 0)"
     else:
         subject = f"[털어드림 격주 후보] {date_slug} · Weekly {wk_count} + Benchmark {bm_count}"
+    subject = _reissue_prefix() + subject
 
-    body_html = _friday_body_html(date_slug, wk_count, bm_count, bm_ok)
+    notice_block = _notice_html(os.environ.get("NOTICE", ""))
+    body_html = _friday_body_html(date_slug, wk_count, bm_count, bm_ok,
+                                   notice_html=notice_block)
 
     # preview 저장 (항상)
     preview_path = LOCAL_OUTPUT_DIR / f"preview_friday_{date_slug}.html"
