@@ -162,7 +162,9 @@ try:
         return kw in reason_map.get(vid, "")
     chk("2-4: V_MINVIEWS → '조회수' & '미만'",
         in_reason("V_MINVIEWS", "미만"))
-    chk("2-5: V_MAXVIEWS → '조회수' & '이상'",
+    # standard 는 MAX_VIEWS_INCLUSIVE=False 유지 → reason 문자열도 기존 "이상" 그대로.
+    # (recent 만 "초과" 로 스위칭 — WEEKLY_PROFILES 의 MAX_VIEWS_INCLUSIVE 토글)
+    chk("2-5: V_MAXVIEWS → '조회수' & '이상' (standard exclusive 유지)",
         in_reason("V_MAXVIEWS", "이상"))
     chk("2-6: V_DUR_PARSE → '길이 파싱 실패'",
         in_reason("V_DUR_PARSE", "파싱 실패"))
@@ -219,11 +221,13 @@ print("=" * 78)
 print(" 4. recent profile — duration_min/parse 안전 집계")
 print("=" * 78)
 try:
+    # 2026-07-21 recent 확장 후 UPLOADED_WITHIN_DAYS=7 로 축소.
+    # pub_iso 를 3일 전으로 잡아 age 컷이 발생하지 않도록 함 (7일 이내).
     r = _run_collect("recent", [
-        mk_video("RD14",  "PT14S",  500_000, title="14초 recent",   pub_iso=iso(10)),
-        mk_video("RD15",  "PT15S",  500_000, title="15초 recent",   pub_iso=iso(10)),
-        mk_video("RD180", "PT3M",   500_000, title="180초 recent",  pub_iso=iso(10)),
-        mk_video("RDP",   "",       500_000, title="parse 실패",    pub_iso=iso(10)),
+        mk_video("RD14",  "PT14S",  500_000, title="14초 recent",   pub_iso=iso(3)),
+        mk_video("RD15",  "PT15S",  500_000, title="15초 recent",   pub_iso=iso(3)),
+        mk_video("RD180", "PT3M",   500_000, title="180초 recent",  pub_iso=iso(3)),
+        mk_video("RDP",   "",       500_000, title="parse 실패",    pub_iso=iso(3)),
     ])
     passed = {c["video_id"] for c in r["candidates"]}
     cut = {c["video_id"] for c in r["hard_excluded"]}

@@ -27,9 +27,10 @@ on:
         type: boolean
         default: false
 
-# 동시 실행 방지
+# 동시 실행 방지 — monday_recent.yml 과 같은 group 을 공유해 push race 완전 회피.
+# (2026-07-21: 월·수·금 recent 확장 대응. 조건·일정·판정은 일체 변경 없음.)
 concurrency:
-  group: weekly-mailer
+  group: teoldeurim-mailer
   cancel-in-progress: false
 
 jobs:

@@ -3,7 +3,8 @@
 털어드림 통합 리포트 오케스트레이터.
 
 책임:
-  - 매주 월요일 (--mode=monday): PROFILE=recent 로 benchmark 실행 → 단일 리포트 첨부 발송
+  - 월·수·금 최근 콘텐츠 (--mode=monday): PROFILE=recent 로 benchmark + weekly recent 실행
+        (2026-07-21 확장 — mode 이름은 backward compat 상 monday 유지, 실제로는 월·수·금 공용)
   - 격주 금요일 (--mode=friday):
       1) benchmark 실행 (PROFILE=standard)     ← 먼저!
       2) weekly 실행 (SEND_EMAIL_DISABLED=1)
@@ -567,9 +568,9 @@ def _monday_body_html(date_slug, wk_count, bm_count, wk_ok, bm_ok):
     # 정상 0건 표시 (실패와 구분)
     zero_notes = []
     if wk_ok and wk_count == 0:
-        zero_notes.append("Weekly 최근 후보 <b>0건</b> — 최근 30일 이내 조건(조회수 10만~100만)에 맞는 새 영상이 없습니다.")
+        zero_notes.append("Weekly 최근 후보 <b>0건</b> — 최근 7일 이내 조건(조회수 5만~100만)에 맞는 새 영상이 없습니다.")
     if bm_ok and bm_count == 0:
-        zero_notes.append("타 채널 Benchmark 최근 후보 <b>0건</b> — 최근 30일 이내 조건에 맞는 새 영상이 없습니다.")
+        zero_notes.append("타 채널 Benchmark 최근 후보 <b>0건</b> — 최근 7일 이내 조건에 맞는 새 영상이 없습니다.")
     zero_block = ""
     if zero_notes:
         items = "".join(f"<li>{n}</li>" for n in zero_notes)
@@ -578,12 +579,12 @@ def _monday_body_html(date_slug, wk_count, bm_count, wk_ok, bm_ok):
 
     return f"""<html><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
 <p>안녕하세요, 박서은입니다.</p>
-<p>이번 주 <b>최근 콘텐츠 통합 리포트</b>를 첨부드립니다. (0일 ~ 30일 이내 신규 콘텐츠)</p>
+<p><b>최근 콘텐츠 통합 리포트</b>를 첨부드립니다. (0일 ~ 7일 이내 신규 콘텐츠 · 월·수·금 3회 발송)</p>
 {fail_note}
 <ul>
   <li>Weekly 최근 후보: {wk_count if wk_ok else "실행 실패"}건 (YouTube 검색어 기반, 최신 업로드 순)</li>
   <li>타 채널 Benchmark 최근 후보: {bm_count if bm_ok else "실행 실패"}건 (4채널 · 최신 업로드 순)</li>
-  <li>조건: 조회수 10만~100만, 업로드 0~30일</li>
+  <li>조건: 조회수 5만~100만, 업로드 0~7일</li>
   <li>중복 제외: 과거 Weekly 발송 + 이전 Benchmark 리포트 이력 (cross-profile dedup)</li>
 </ul>
 {zero_block}
@@ -700,7 +701,7 @@ def run_monday(date_slug, tmp_dir, dry_run=False):
         wk_summary=wk_summary, bm_summary=bm_summary,
         wk_label="Weekly 최근 후보",
         bm_label="타 채널 Benchmark 최근 후보",
-        header_sub=f"{date_slug} · 최근 30일 이내 콘텐츠 (Weekly recent + Benchmark recent)",
+        header_sub=f"{date_slug} · 최근 7일 이내 콘텐츠 (Weekly recent + Benchmark recent)",
     )
 
     # subject

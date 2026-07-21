@@ -135,21 +135,22 @@ BENCHMARK_PROFILES = {
         "MAX_ANALYSIS_CANDIDATES": 10,
         "FINAL_CANDIDATES": 5,
     },
-    # 매주 월요일 — 최근 콘텐츠 발굴 (0일 ~ 30일)
+    # 월·수·금 최근 콘텐츠 통합 리포트용 (0일 ~ 7일).
+    #   2026-07-21 대표님 요청: 주 3회 발송 확장 + MIN_VIEWS 10만 → 5만
+    #   / UPLOADED_WITHIN_DAYS 30일 → 7일 로 축소.
     "recent": {
         "SORT_BY": "NEWEST",
         "MAX_SHORTS_PER_CHANNEL": 50,
         "MAX_TOTAL_RAW": 30,
-        "MIN_VIEWS": 100_000,
+        "MIN_VIEWS": 50_000,
         "MAX_VIEWS": 1_000_000,
         "MAX_DURATION_SEC": 180,
         "MIN_DURATION_SEC": 15,
-        # 업로드 age 범위: 0일 ≤ age ≤ 30일. 정확히 30일 timestamp도 여기 포함.
+        # 업로드 age 범위: 0일 ≤ age ≤ 7일. 정확히 7일 timestamp도 여기 포함.
         "MIN_AGE_DAYS_EXCLUSIVE": None,   # 하한 없음 (업로드 당일 포함)
-        "UPLOADED_WITHIN_DAYS": 30,       # 30일 초과 컷
-        # 2026-07-14 실측: 조회수 통과 128개 중 이센느 첫 영상이 #11.
-        # standard(10)와 달리 recent는 채널당 최상위 조회수가 상대적으로 낮게 분산돼
-        # top 10 만으로는 특정 채널만 몰림 → 15로 조정해 채널 다양성 확보.
+        "UPLOADED_WITHIN_DAYS": 7,        # 7일 초과 컷
+        # 2026-07-14 실측 결과 (30일 기준) 반영: 채널당 조회수 분산이 커
+        # top 10 만으로는 특정 채널 편중 → 15로 조정해 채널 다양성 확보.
         # (채널당 쿼터·라운드 로빈·점수 보정 없이 조회수 순 정렬 그대로 유지)
         "MAX_ANALYSIS_CANDIDATES": 15,
         "FINAL_CANDIDATES": 5,

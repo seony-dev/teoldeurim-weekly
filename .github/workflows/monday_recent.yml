@@ -1,25 +1,40 @@
-name: 털어드림 최근 콘텐츠 리포트 (매주 월요일)
+name: 털어드림 최근 콘텐츠 리포트 (월·수·금)
 
-# 매주 월요일 08:42 KST = 매주 일요일 23:42 UTC
-# recent 프로파일 (조회수 10만~100만, NEWEST 정렬) 로 4채널 최근 콘텐츠 발굴
+# 2026-07-21 대표님 요청: 기존 매주 월요일 단독 → 월·수·금 주 3회 발송 확장.
+# recent 프로파일 (조회수 5만~100만, 업로드 0~7일 이내, NEWEST 정렬) 로
+# 4채널(+ Weekly 검색어 기반) 최근 콘텐츠 발굴.
+#
+# 실행 시각 (KST):
+#   · 월요일 08:42  (기존 유지)
+#   · 수요일 08:42  (신규)
+#   · 금요일 09:30  (신규) — 격주 금 standard 는 08:42 KST 이므로 48분 간격으로
+#                          history commit push race 회피
+#
+# 파일명은 이 workflow 의 기존 이름(`monday_recent.yml`) 을 유지하되, 표시명·주석·
+# step 명·history commit 메시지는 모두 "최근 콘텐츠 (recent)" 기준으로 명시.
+# 내부 python 실행 --mode=monday 도 backward compatibility 상 그대로 유지.
 on:
   schedule:
     - cron: '42 23 * * 0'   # 일요일 23:42 UTC = 월요일 08:42 KST
+    - cron: '42 23 * * 2'   # 화요일 23:42 UTC = 수요일 08:42 KST
+    - cron: '30 0 * * 5'    # 금요일 00:30 UTC = 금요일 09:30 KST
   workflow_dispatch:
 
-# weekly.yml, resend.yml과 서로 다른 concurrency group — 필요 시 병렬 가능.
-# 다만 sent history commit race 방지 위해 pull --rebase 사용.
+# weekly.yml (격주 금 standard) 와 같은 concurrency group 공유 —
+# 금요일에 standard(08:42) 가 실행 중이면 recent(09:30) 가 queue 에서 대기.
+# → git push race 원천 차단 + 안전한 순차 실행 보장.
+# (아래 pull --rebase --autostash 도 함께 유지해 이중 방어.)
 concurrency:
-  group: monday-recent
+  group: teoldeurim-mailer
   cancel-in-progress: false
 
 jobs:
-  send-monday-recent:
+  send-recent-integrated:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     permissions:
-      contents: write   # benchmark/history/sent/ 커밋 권한
+      contents: write   # history/ 및 benchmark/history/sent/ 커밋 권한
 
     steps:
       - name: 레포 체크아웃
@@ -37,7 +52,7 @@ jobs:
 
       # ============================================================
       # 시크릿 사전 검증
-      # → Monday 통합 리포트는 Weekly recent + Benchmark recent 함께 실행하므로
+      # → recent 통합 리포트는 Weekly recent + Benchmark recent 함께 실행하므로
       #   YOUTUBE_API_KEY (Weekly)와 APIFY_TOKEN (Benchmark) 모두 필수
       # ============================================================
       - name: 시크릿 사전 검증
@@ -67,13 +82,13 @@ jobs:
           fi
 
       # ============================================================
-      # orchestrator 실행 — mode=monday
+      # orchestrator 실행 — mode=monday (내부 코드 backward compat; 실제로는 월·수·금 공용)
       # 내부: benchmark(PROFILE=recent) + weekly(WEEKLY_PROFILE=recent) 통합 shell
       # → 발송 성공 후:
       #     · benchmark/history/sent/YYYY-MM-DD_recent.json 자동 생성 (recent dedup 근거)
       #     · history/YYYY-MM-DD_recent.json 자동 생성 (Weekly cross-profile dedup 근거)
       # ============================================================
-      - name: 오케스트레이터 실행 (mode=monday)
+      - name: 오케스트레이터 실행 (recent 통합)
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
@@ -87,13 +102,15 @@ jobs:
       # ============================================================
       # history 커밋 — Weekly recent history + benchmark 공용 sent history
       # → 발송 실패 시 각 파일 생성 자체가 안 됨. add 대상 없으면 조용히 pass.
-      # → recent 파일명은 `YYYY-MM-DD_recent.json` 형식 (standard의 RESEND_LATEST에는 자동 제외됨).
+      # → recent 파일명은 `YYYY-MM-DD_recent.json` 형식 (standard 의 RESEND_LATEST 에는
+      #    자동 제외됨 — weekly.py 는 `\d{4}-\d{2}-\d{2}` fullmatch 로 recent 접미사 파일 제외).
+      # → 금요일에는 앞선 standard(08:42) 의 push 를 pull --rebase 로 먼저 반영.
       # ============================================================
       - name: history 커밋
         run: |
           git config user.name "teoldeurim-bot"
           git config user.email "actions@github.com"
-          # 다른 workflow가 push한 커밋을 먼저 반영 (race 방지)
+          # 다른 workflow (weekly.yml standard 등) 가 push 한 커밋을 먼저 반영 (race 방지)
           git pull --rebase --autostash
           git add history/ 2>/dev/null || true
           git add benchmark/history/sent/ 2>/dev/null || true
@@ -101,7 +118,8 @@ jobs:
             echo "신규 history 파일 없음 (커밋 생략)"
           else
             today=$(TZ=Asia/Seoul date +%Y-%m-%d)
-            git commit -m "history: ${today} Monday recent 리포트 (weekly + benchmark)"
+            dow=$(TZ=Asia/Seoul date +%A)   # Monday / Wednesday / Friday 등
+            git commit -m "history: ${today} (${dow}) 최근 콘텐츠 리포트 (recent)"
             git push
             echo "✅ 커밋 완료"
           fi

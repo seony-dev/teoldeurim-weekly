@@ -38,6 +38,9 @@ CONFIG = {
     "MIN_VIEWS": 500_000,           # 100만 이상 → 50만 이상 (26.07.13 변경)
     "MAX_VIEWS": 9_000_000,         # 500만 → 900만으로 상향 (26.07.14, Friday 통합 리포트에서
                                     # Benchmark standard(50만~900만)와 조건 통일)
+    # 상한 판정 기본값: 기존 standard 는 exclusive (views >= MAX_VIEWS → cut).
+    # profile 이 명시적으로 True 로 설정하면 inclusive (views > MAX_VIEWS → cut).
+    "MAX_VIEWS_INCLUSIVE": False,
     "MAX_DURATION_SEC": 180,        # Shorts 길이 상한
     "MIN_DURATION_SEC": 15,         # 15초 미만 초단타 영상 제외 (26.07.15, 대표님 요청)
     # YouTube API pull 범위 — 실제 최종 판정은 아래 MIN_AGE / UPLOADED_WITHIN_DAYS
@@ -124,8 +127,11 @@ CONFIG = {
 # ============================================================================
 # 프로파일 — WEEKLY_PROFILE env 기준 CONFIG override.
 # ----------------------------------------------------------------------------
-# - "standard" (default): 위 CONFIG 그대로 (backward compat)
-# - "recent": Monday 통합 리포트용 (0~30일, 조회수 10만~100만, 최신순)
+# - "standard" (default): 위 CONFIG 그대로 (backward compat, 격주 금요일 08:42 KST)
+# - "recent": 월·수·금 최근 콘텐츠 통합 리포트용 (0~7일, 조회수 5만~100만, 최신순)
+#     · 월 08:42 KST / 수 08:42 KST / 금 09:30 KST 실행 (2026-07-21 확장)
+#     · 발송 history 는 실행일별로 분리 저장(`YYYY-MM-DD_recent.json`) —
+#       월·수·금끼리 서로 dedup 자동 성립, standard 와도 cross-profile dedup.
 # WEEKLY_PROFILE 미지정 시 standard — 기존 실행은 완전히 동일하게 유지됨.
 # ============================================================================
 WEEKLY_PROFILES = {
@@ -134,6 +140,9 @@ WEEKLY_PROFILES = {
     "standard": {
         "MIN_VIEWS": 500_000,
         "MAX_VIEWS": 9_000_000,
+        # 상한 판정: 기존 격주 standard 는 exclusive (views >= MAX_VIEWS → cut).
+        # 즉 정확히 9_000_000 view 는 컷 — 기존 동작 그대로 유지.
+        "MAX_VIEWS_INCLUSIVE": False,
         "LOOKBACK_DAYS_OLDEST": 366,
         "LOOKBACK_DAYS_NEWEST_PRIMARY": 29,
         "LOOKBACK_DAYS_NEWEST_FALLBACK": 29,
@@ -142,15 +151,21 @@ WEEKLY_PROFILES = {
         "SEARCH_ORDER": "viewCount",
     },
     "recent": {
-        "MIN_VIEWS": 100_000,
+        # 2026-07-21 대표님 요청: 월·수·금 3회 발송 확장 + 조회수·업로드 조건 강화.
+        #   MIN_VIEWS 10만 → 5만 (더 넓은 발굴)
+        #   UPLOADED_WITHIN_DAYS 30일 → 7일 (더 신선한 콘텐츠)
+        "MIN_VIEWS": 50_000,
         "MAX_VIEWS": 1_000_000,
-        # API pull: 0~31일 (buffer +1). 최종 판정은 로컬 timestamp.
-        "LOOKBACK_DAYS_OLDEST": 31,
+        # 상한 판정: recent 는 inclusive (views > MAX_VIEWS → cut) — 사용자 스펙 "1M 이하" 준수.
+        # 정확히 1_000_000 view 는 pass.
+        "MAX_VIEWS_INCLUSIVE": True,
+        # API pull: 0~8일 (buffer +1). 최종 판정은 로컬 timestamp.
+        "LOOKBACK_DAYS_OLDEST": 8,
         "LOOKBACK_DAYS_NEWEST_PRIMARY": 0,
         "LOOKBACK_DAYS_NEWEST_FALLBACK": 0,
-        # 로컬 age 필터: 0일 ≤ age ≤ 30일 (정확히 30일 포함).
+        # 로컬 age 필터: 0일 ≤ age ≤ 7일 (정확히 7일 포함).
         "MIN_AGE_DAYS_EXCLUSIVE": None,
-        "UPLOADED_WITHIN_DAYS": 30,
+        "UPLOADED_WITHIN_DAYS": 7,
         "SEARCH_ORDER": "date",   # 최신 업로드 우선
     },
 }
@@ -162,7 +177,7 @@ def _display_age_range():
     내부 API pull buffer (LOOKBACK_DAYS_*) 는 노출하지 않는다.
     실제 local timestamp 필터 기준 (MIN_AGE_DAYS_EXCLUSIVE, UPLOADED_WITHIN_DAYS) 만 반영.
 
-    - recent  (MIN=None, MAX=30) : "업로드 직후 ~ 30일 이내"
+    - recent  (MIN=None, MAX=7)  : "업로드 직후 ~ 7일 이내"
     - standard (MIN=30,  MAX=365): "30일 초과 ~ 365일 이내"
     """
     age_min = CONFIG.get("MIN_AGE_DAYS_EXCLUSIVE")
@@ -483,19 +498,35 @@ def blocked_by_keyword(title):
 # ============================================================================
 # 수집 + 필터링
 # ============================================================================
-def hard_filter_reason(row):
+def hard_filter_reason(row, now=None):
     """row가 하드 필터에 걸리면 (사유 문자열, drop키) 반환. 통과면 (None, None).
 
     업로드 age 판정은 실제 published_at UTC timestamp 기준 (초 단위 정확도).
-    - recent (MIN_AGE_DAYS_EXCLUSIVE=None, UPLOADED_WITHIN_DAYS=30): age ≤ 30 통과
+    - recent   (MIN_AGE_DAYS_EXCLUSIVE=None, UPLOADED_WITHIN_DAYS=7): 0 ≤ age ≤ 7 통과
     - standard (MIN_AGE=30, UPLOADED_WITHIN=365):  30 < age ≤ 365 통과
       정확히 age=30 timestamp는 recent에만 포함되도록 strict `>=` 컷 사용.
+
+    Args:
+      now: age 판정 기준 시각 (timezone-aware UTC). None 이면 함수 진입 시점의
+           datetime.now(timezone.utc) 사용. **하나의 collect 실행 안에서 모든 row
+           에 대해 동일한 기준 시각을 쓰고 싶거나 (fair batch), 테스트에서 정확한
+           경계 (예: 정확히 7일 pass) 를 검증하고 싶을 때 명시 주입.**
     """
     v = row["view_count"]
     if v < CONFIG["MIN_VIEWS"]:
         return f"조회수 {CONFIG['MIN_VIEWS']//10000}만 미만 ({v:,}회)", "min_views"
-    if v >= CONFIG["MAX_VIEWS"]:
-        return f"조회수 {CONFIG['MAX_VIEWS']//10000}만 이상 ({v:,}회)", "max_views"
+    # 상한 판정은 profile 의 MAX_VIEWS_INCLUSIVE 로 스위칭:
+    #   · standard (False): views >= MAX_VIEWS → cut. 정확히 9,000,000 은 컷 (기존 동작 유지).
+    #     문구: "900만 이상"
+    #   · recent   (True):  views >  MAX_VIEWS → cut. 정확히 1,000,000 은 pass (사용자 스펙 "이하").
+    #     문구: "100만 초과"
+    max_v = CONFIG["MAX_VIEWS"]
+    if CONFIG.get("MAX_VIEWS_INCLUSIVE", False):
+        if v > max_v:
+            return f"조회수 {max_v//10000}만 초과 ({v:,}회)", "max_views"
+    else:
+        if v >= max_v:
+            return f"조회수 {max_v//10000}만 이상 ({v:,}회)", "max_views"
     d = row["duration_seconds"]
     max_dur = CONFIG["MAX_DURATION_SEC"]
     min_dur = CONFIG.get("MIN_DURATION_SEC", 0)  # 26.07.15: 15초 미만 초단타 컷
@@ -513,15 +544,18 @@ def hard_filter_reason(row):
         return "제목 키워드 차단 (직캠/풀캠 등)", "keyword"
     # 업로드 age 필터 (timestamp source of truth)
     age_min = CONFIG.get("MIN_AGE_DAYS_EXCLUSIVE")   # None 또는 30
-    age_max = CONFIG.get("UPLOADED_WITHIN_DAYS")     # 30 또는 365
+    age_max = CONFIG.get("UPLOADED_WITHIN_DAYS")     # 7 또는 30 또는 365
     if age_min is not None or age_max is not None:
         pub = parse_timestamp(row.get("published_at", ""))
         if pub is None:
             return "업로드 시간 파싱 실패 (age_parse)", "age_parse"
-        now = datetime.now(timezone.utc)
-        if age_min is not None and pub >= now - timedelta(days=age_min):
+        # 기준 시각은 인자로 받은 값 우선. 미지정이면 현재 시각.
+        # 실제 실행에서는 collect() 가 호출당 하나의 now 를 만들어 배치 내 모든 row 에
+        # 동일 기준 적용. 테스트에서는 fixed_now 를 주입해 "정확히 N일 pass" 경계 검증.
+        _now = now if now is not None else datetime.now(timezone.utc)
+        if age_min is not None and pub >= _now - timedelta(days=age_min):
             return f"업로드 {age_min}일 이내 (범위 밖)", "age_min"
-        if age_max is not None and pub < now - timedelta(days=age_max):
+        if age_max is not None and pub < _now - timedelta(days=age_max):
             return f"업로드 {age_max}일 초과", "age_max"
     return None, None
 
@@ -593,6 +627,8 @@ def collect(api_key, days_oldest, days_newest, seen_meta=None):
     #   min_views, max_views, duration_parse, duration_min, duration,
     #   korean, channel, keyword, age_parse, age_min, age_max
     drop = Counter()
+    # 배치 내 모든 row 는 동일한 기준 시각으로 age 판정 (fair batch, 편차 방지).
+    batch_now = datetime.now(timezone.utc)
     for v in details:
         try:
             row = parse_item(v)
@@ -600,7 +636,7 @@ def collect(api_key, days_oldest, days_newest, seen_meta=None):
             continue
         # 검색어 어트리뷰션 — 후보 선정/필터 로직에는 영향 없음, 리포트 표시 전용
         row["matched_queries"] = sorted(matched_by_id.get(row["video_id"], set()))
-        reason, dropkey = hard_filter_reason(row)
+        reason, dropkey = hard_filter_reason(row, now=batch_now)
         if reason:
             drop[dropkey] += 1
             row["stage"] = "hard_excluded"
