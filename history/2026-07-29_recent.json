@@ -1,0 +1,458 @@
+{
+  "date_kst": "2026-07-29",
+  "profile": "recent",
+  "generated_at_utc": "2026-07-29T01:13:37.307242+00:00",
+  "config": {
+    "min_views": 50000,
+    "max_views": 1000000,
+    "max_duration_seconds": 180,
+    "lookback_days_used": "0~8일 전 (fallback)",
+    "min_age_days_exclusive": null,
+    "uploaded_within_days": 7
+  },
+  "stats": {
+    "lookback_days": "0~8일 전 (fallback)",
+    "total_collected": 20,
+    "dedup_excluded": 4,
+    "total_after_filter": 1,
+    "hard_filter_excluded": 15,
+    "soft_filter_excluded": 0,
+    "final_count": 1
+  },
+  "candidates": [
+    {
+      "video_id": "a7i1or8BlQw",
+      "url": "https://www.youtube.com/shorts/a7i1or8BlQw",
+      "title": "SM 여돌이 1황이 되는 방법 #shorts",
+      "channel": "K팝과몰입러",
+      "channel_id": "UCLILKYP0GU5S5JrGFryBK_A",
+      "published_at": "2026-07-25T03:00:37Z",
+      "view_count": 52475,
+      "duration_seconds": 60,
+      "default_lang": "en",
+      "matched_queries": [
+        "아이돌 비하인드 shorts",
+        "케이팝 비하인드 shorts"
+      ],
+      "stage": "hard_passed",
+      "analysis": {
+        "topic_type": "K-pop 산업 분석 (SM 여돌 1황 공식)",
+        "title_pattern": "'[회사] 여돌이 1황이 되는 방법'",
+        "low_timeliness_reason": "SM 여돌 흥행 공식은 세대를 넘어 반복 소환되는 구조적 소재",
+        "channel_fit": "명세 'K-pop 산업 분석 shorts' 정합. SM 시스템·컨셉·푸시 구조를 계보형으로 해설 가능",
+        "first_3sec_hook": "설명형. 보아→소녀시대→f(x)→레드벨벳→에스파 라인업 나열 + '1황 공식은 정해져 있다' 자막",
+        "variation_topic": "SM 여돌 1황 공식(컨셉·데뷔 시기·타이틀곡 구조)을 세대별 사례로 분해해 에스파·하츠투하츠에 어떻게 이식됐는지 해설",
+        "should_include": true,
+        "exclusion_reason": ""
+      },
+      "status_label": "최종 발송"
+    }
+  ],
+  "soft_excluded": [],
+  "waitlist": [],
+  "report_lists": {
+    "dedup_excluded": [
+      {
+        "video_id": "hn6v8_sLrXU",
+        "url": "https://www.youtube.com/shorts/hn6v8_sLrXU",
+        "title": "양현석이 듣자마자 뺏겨버린 전설의 명곡 #shorts",
+        "channel": "K팝과몰입러",
+        "channel_id": "UCLILKYP0GU5S5JrGFryBK_A",
+        "published_at": "2026-07-21T09:15:20Z",
+        "view_count": 221898,
+        "duration_seconds": 48,
+        "default_lang": "en",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "dedup_excluded",
+        "analysis": {
+          "topic_type": "K-pop 산업 분석 (양현석/YG 명곡 비하인드)",
+          "title_pattern": "'[대표/프로듀서]가 듣자마자 뺏겨버린 [수식어] 명곡'",
+          "low_timeliness_reason": "과거 명곡 제작·판권 이동 비하인드는 시간이 지나도 반복 소환되는 아카이브형 소재",
+          "channel_fit": "명세 'K-pop 산업 분석' 정합. 곡 선점·A&R 결정 구조를 양현석 사례로 해설 가능",
+          "first_3sec_hook": "의외성형. 양현석 사진 + 문제의 곡 인트로 + '이 곡 듣자마자' 자막",
+          "variation_topic": "양현석의 곡 선점 사례를 통해 본 YG A&R 시스템과 대형 기획사 간 곡 쟁탈 구조 분석",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "중복 제외",
+        "sent_date": "2026-07-27",
+        "exclusion_reason": "과거 발송 이력 중복 (2026-07-27 발송)"
+      },
+      {
+        "video_id": "NQdVBBVeaI0",
+        "url": "https://www.youtube.com/shorts/NQdVBBVeaI0",
+        "title": "뉴스 끝나자마자 의상도 못 벗고 걸그룹 보러 폭주한 지상파 메인 앵커들 #shorts",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-07-25T02:00:30Z",
+        "view_count": 197481,
+        "duration_seconds": 34,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts"
+        ],
+        "stage": "dedup_excluded",
+        "analysis": {
+          "topic_type": "관계성·계보 분석 (지상파 앵커 ↔ 걸그룹)",
+          "title_pattern": "'[직업군]이 의상도 못 벗고 [행동]한 [대상]'",
+          "low_timeliness_reason": "방송인·기자들이 특정 걸그룹 팬임을 드러낸 에피소드는 시간이 지나도 팬-아이돌 상호작용 사례로 반복 소비됨",
+          "channel_fit": "명세 '관계성·계보 분석' 정합. 지상파 앵커라는 의외의 팬층과 걸그룹 간 상호작용을 2차 해석으로 확장 가능",
+          "first_3sec_hook": "의외성형. 뉴스 앵커 정장 차림 + '뉴스 끝나자마자 달려간 곳' 자막 오버레이",
+          "variation_topic": "지상파 앵커들이 공개적으로 특정 걸그룹 팬임을 드러내는 현상 — 대중 인지도 최상위 그룹의 세대 확장 구조 해설",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "중복 제외",
+        "sent_date": "2026-07-27",
+        "exclusion_reason": "과거 발송 이력 중복 (2026-07-27 발송)"
+      },
+      {
+        "video_id": "VnLfTtPSF6k",
+        "url": "https://www.youtube.com/shorts/VnLfTtPSF6k",
+        "title": "듣보 시절 인연 잊지 않고 의리 지키러 출격한 걸그룹 멤버들 #shorts",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-07-25T07:00:18Z",
+        "view_count": 128757,
+        "duration_seconds": 29,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts"
+        ],
+        "stage": "dedup_excluded",
+        "analysis": {
+          "topic_type": "관계성·계보 분석 (걸그룹 멤버들)",
+          "title_pattern": "'듣보 시절 인연 잊지 않고 [행동] 지키러 출격한 [그룹/인물]'",
+          "low_timeliness_reason": "데뷔 전 인연을 데뷔 후에도 챙기는 의리 구조는 세대마다 반복 소환되는 장기 소재",
+          "channel_fit": "명세 '관계성·계보 분석' 정합. 무명 시절 인연을 지킨 아이돌 행동 패턴을 2차 해석으로 확장 가능",
+          "first_3sec_hook": "의외성형. '듣보 시절부터 알던 사이' 자막 + 과거/현재 사진 교차 편집",
+          "variation_topic": "데뷔 전 연습생·무명 시절 인연을 유지하는 걸그룹 멤버들의 행동 패턴 — 아이돌 인간관계 구조 해설",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "중복 제외",
+        "sent_date": "2026-07-27",
+        "exclusion_reason": "과거 발송 이력 중복 (2026-07-27 발송)"
+      },
+      {
+        "video_id": "ke5qWzWQltw",
+        "url": "https://www.youtube.com/shorts/ke5qWzWQltw",
+        "title": "중소돌 기적인 줄 알았는데 스케줄표 열어보니 1군 탑 여돌 찍어버린 걸그룹 #shorts",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-07-23T07:00:32Z",
+        "view_count": 96363,
+        "duration_seconds": 33,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "dedup_excluded",
+        "analysis": {
+          "topic_type": "K-pop 산업 분석 (중소 걸그룹 스케줄 역전 구조)",
+          "title_pattern": "'[중소돌] 기적인 줄 알았는데 [증거] 열어보니 [1군 지표] 찍어버린 [그룹]'",
+          "low_timeliness_reason": "중소돌이 1군으로 올라서는 성장 구조는 매 세대마다 반복되는 산업 분석 소재",
+          "channel_fit": "명세 'K-pop 산업 분석' 정합. 스케줄표라는 구체 지표로 소속사 규모 vs 실질 위상의 역전을 해설 가능",
+          "first_3sec_hook": "의외성형. '중소돌인 줄 알았는데...' 자막 + 빽빽한 스케줄표 이미지 클로즈업",
+          "variation_topic": "중소 기획사 걸그룹이 1군 스케줄 밀도에 진입하는 구조 — 음방·행사·광고 물량이 회사 규모가 아닌 팬덤 화력으로 결정되는 산업 변화 해설",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "중복 제외",
+        "sent_date": "2026-07-24",
+        "exclusion_reason": "과거 발송 이력 중복 (2026-07-24 발송)"
+      }
+    ],
+    "hard_excluded": [
+      {
+        "video_id": "skzY-0sN8lM",
+        "url": "https://www.youtube.com/shorts/skzY-0sN8lM",
+        "title": "간식 양 보고 찐으로 분노해서 리더 청문회 여는 아이돌 멤버들 ㅋㅋ #shorts",
+        "channel": "파이리센느강",
+        "channel_id": "UCVus0R5yMzKkxtXOPSyloDg",
+        "published_at": "2026-07-21T03:00:14Z",
+        "view_count": 44172,
+        "duration_seconds": 44,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (44,172회)"
+      },
+      {
+        "video_id": "x3gV8XmMe0g",
+        "url": "https://www.youtube.com/shorts/x3gV8XmMe0g",
+        "title": "연간 1위 찍고 시상식은 안 간 걸그룹 #shorts",
+        "channel": "K팝과몰입러",
+        "channel_id": "UCLILKYP0GU5S5JrGFryBK_A",
+        "published_at": "2026-07-23T09:15:00Z",
+        "view_count": 42845,
+        "duration_seconds": 52,
+        "default_lang": "en",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts",
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (42,845회)"
+      },
+      {
+        "video_id": "8m4NBhHdlSI",
+        "url": "https://www.youtube.com/shorts/8m4NBhHdlSI",
+        "title": "음중 사전녹화 비하인드? 그냥 리브 직캠이자나!\r#안원잘 #리센느 #원이 #리브 #미나미 #메이 #제나#shorts #프리티걸 #러브어택",
+        "channel": "너의최애는",
+        "channel_id": "UCld30QNVnIa1tvcTVTs2X_g",
+        "published_at": "2026-07-21T03:05:18Z",
+        "view_count": 37852,
+        "duration_seconds": 19,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (37,852회)"
+      },
+      {
+        "video_id": "-EZAa7LPw3o",
+        "url": "https://www.youtube.com/shorts/-EZAa7LPw3o",
+        "title": "기안84 앞에서 뼈 때리는 팩폭 날리는 리센느 ㅋㅋ #shorts",
+        "channel": "뒷집형",
+        "channel_id": "UC8Tzm7xCqxQIqJLKwGC7L8w",
+        "published_at": "2026-07-22T09:00:28Z",
+        "view_count": 37727,
+        "duration_seconds": 28,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (37,727회)"
+      },
+      {
+        "video_id": "hhqTXxsZ1Z8",
+        "url": "https://www.youtube.com/shorts/hhqTXxsZ1Z8",
+        "title": "아이돌보다 더 유명해진 역대급 셀럽 경호원들 모음.zip ㄷㄷ #아이돌",
+        "channel": "금보리",
+        "channel_id": "UCu26Ir5kgYH-Yz4XA7JwmWQ",
+        "published_at": "2026-07-21T03:08:13Z",
+        "view_count": 15473,
+        "duration_seconds": 15,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (15,473회)"
+      },
+      {
+        "video_id": "CZc5baUKWJY",
+        "url": "https://www.youtube.com/shorts/CZc5baUKWJY",
+        "title": "기안84도 깜짝 놀라게 만든 아이돌의 상상초월 행사 스케줄 수준 #shorts",
+        "channel": "숏츠보고",
+        "channel_id": "UCtLysEh1uqFWleUBDdJlEAg",
+        "published_at": "2026-07-25T09:00:39Z",
+        "view_count": 8345,
+        "duration_seconds": 51,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (8,345회)"
+      },
+      {
+        "video_id": "NUT9ddUisIc",
+        "url": "https://www.youtube.com/shorts/NUT9ddUisIc",
+        "title": "거울 하나가 아이돌 만든 이유 #shorts #꼬마춤",
+        "channel": "지구월드",
+        "channel_id": "UCa-OR4lg08SndKOoVU_yPDg",
+        "published_at": "2026-07-27T15:32:42Z",
+        "view_count": 5867,
+        "duration_seconds": 17,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 숨겨진 이유 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (5,867회)"
+      },
+      {
+        "video_id": "h__OzCY5XH0",
+        "url": "https://www.youtube.com/shorts/h__OzCY5XH0",
+        "title": "뮤비 비하인드가 아니라 영화 비하인드를 찍어 온 기현이 #몬스타엑스 #기현 #monstax #kihyun #유기현 #sogood #몬베베 #monbebe #kpop #idol",
+        "channel": "채류기",
+        "channel_id": "UCDjFa0AWTc0bezLaB0ZpqNw",
+        "published_at": "2026-07-22T13:33:34Z",
+        "view_count": 2934,
+        "duration_seconds": 16,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (2,934회)"
+      },
+      {
+        "video_id": "cL8Fw6oX9yQ",
+        "url": "https://www.youtube.com/shorts/cL8Fw6oX9yQ",
+        "title": "임영웅 광고 비하인드! 하트 하나로는 부족해요! 올해도 건행하세요🍀",
+        "channel": "영웅HERO",
+        "channel_id": "UCnRaJ2nq3l_8oKe2sx0_Nvw",
+        "published_at": "2026-07-23T04:00:39Z",
+        "view_count": 1428,
+        "duration_seconds": 27,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,428회)"
+      },
+      {
+        "video_id": "iI7QbcZXSNw",
+        "url": "https://www.youtube.com/shorts/iI7QbcZXSNw",
+        "title": "요즘 아이돌 연습생 라이브 실력",
+        "channel": "이케맨저점매수",
+        "channel_id": "UCd_oEAhz_genwliqo0XTn1w",
+        "published_at": "2026-07-28T09:19:55Z",
+        "view_count": 1375,
+        "duration_seconds": 21,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 라이브 실력 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,375회)"
+      },
+      {
+        "video_id": "7rgOLvar8zE",
+        "url": "https://www.youtube.com/shorts/7rgOLvar8zE",
+        "title": "힙냥즈 싸우는 연기 #alphadriveone #kpop #ald1 #leo #이리오 #조우안신 #leeleo #anxin #알디원 #알파드라이브원 #남돌 #비하인드 #shorts",
+        "channel": "AD모먼트(원드라이브)",
+        "channel_id": "UCb8JZjppUyZ95pErYNHXtVA",
+        "published_at": "2026-07-22T13:00:07Z",
+        "view_count": 1291,
+        "duration_seconds": 47,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,291회)"
+      },
+      {
+        "video_id": "snKpG3IwgFU",
+        "url": "https://www.youtube.com/shorts/snKpG3IwgFU",
+        "title": "아이돌 연습생 인생 첫 화보 촬영 비하인드",
+        "channel": "이케맨저점매수",
+        "channel_id": "UCd_oEAhz_genwliqo0XTn1w",
+        "published_at": "2026-07-23T06:47:34Z",
+        "view_count": 1078,
+        "duration_seconds": 22,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts",
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,078회)"
+      },
+      {
+        "video_id": "q25M-Gscydo",
+        "url": "https://www.youtube.com/shorts/q25M-Gscydo",
+        "title": "[롱샷] 4SHOCOVER 포토 비하인드 #lngshot #kpop",
+        "channel": "LNGGANE ",
+        "channel_id": "UCef6n3H90y6_nG6rk9XyeUw",
+        "published_at": "2026-07-22T03:28:03Z",
+        "view_count": 475,
+        "duration_seconds": 33,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (475회)"
+      },
+      {
+        "video_id": "6rW56gNq22M",
+        "url": "https://www.youtube.com/shorts/6rW56gNq22M",
+        "title": "6.67mm 초고해상도로 진화한 코엑스 K-POP 스퀘어 리뉴얼 비하인드 #shorts #Kinoton",
+        "channel": "키노톤(주)",
+        "channel_id": "UCQXvVJIRvxRQYeD5uYXk92Q",
+        "published_at": "2026-07-22T08:00:00Z",
+        "view_count": 231,
+        "duration_seconds": 80,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (231회)"
+      },
+      {
+        "video_id": "YMfJBVQs0l8",
+        "url": "https://www.youtube.com/shorts/YMfJBVQs0l8",
+        "title": "\"새 상 다가진 척 해야지\" 😂 촬영 준비하는 비하인드 #Shorts",
+        "channel": "SoundBite Sessions",
+        "channel_id": "UCDtjc5U7SjI88b6i3yhev0g",
+        "published_at": "2026-07-28T19:07:26Z",
+        "view_count": 0,
+        "duration_seconds": 17,
+        "default_lang": "en",
+        "matched_queries": [
+          "아이돌 비하인드 shorts",
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (0회)"
+      }
+    ],
+    "hard_passed": [
+      {
+        "video_id": "a7i1or8BlQw",
+        "url": "https://www.youtube.com/shorts/a7i1or8BlQw",
+        "title": "SM 여돌이 1황이 되는 방법 #shorts",
+        "channel": "K팝과몰입러",
+        "channel_id": "UCLILKYP0GU5S5JrGFryBK_A",
+        "published_at": "2026-07-25T03:00:37Z",
+        "view_count": 52475,
+        "duration_seconds": 60,
+        "default_lang": "en",
+        "matched_queries": [
+          "아이돌 비하인드 shorts",
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_passed",
+        "analysis": {
+          "topic_type": "K-pop 산업 분석 (SM 여돌 1황 공식)",
+          "title_pattern": "'[회사] 여돌이 1황이 되는 방법'",
+          "low_timeliness_reason": "SM 여돌 흥행 공식은 세대를 넘어 반복 소환되는 구조적 소재",
+          "channel_fit": "명세 'K-pop 산업 분석 shorts' 정합. SM 시스템·컨셉·푸시 구조를 계보형으로 해설 가능",
+          "first_3sec_hook": "설명형. 보아→소녀시대→f(x)→레드벨벳→에스파 라인업 나열 + '1황 공식은 정해져 있다' 자막",
+          "variation_topic": "SM 여돌 1황 공식(컨셉·데뷔 시기·타이틀곡 구조)을 세대별 사례로 분해해 에스파·하츠투하츠에 어떻게 이식됐는지 해설",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "최종 발송"
+      }
+    ]
+  }
+}
