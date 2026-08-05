@@ -1,11 +1,18 @@
-# 털어드림 주간 후보 자동 메일링 + 타 채널 벤치마크
+# 털어드림 자동 메일링 + 타 채널 벤치마크
 
 K-pop Shorts 채널 **'털어드림'**의 콘텐츠 소싱을 자동화하는 봇 모음.
 
-- **주간 메일러 (`weekly.py`)** — 매주 금요일 09:00 KST에 YouTube에서 K-pop Shorts 후보를
-  자동 수집 → AI(Claude) 분석 → 이메일 발송 → `history/`에 영구 아카이브.
-- **타 채널 벤치마크 (`benchmark.py`)** — (신규/보조) 외부 참고 채널의 인기 Shorts를 수집해
-  "털어드림에 쓸 만한 참고 후보 + 기획 포인트" 리포트를 생성.
+- **주간 메일러 (`weekly.py` + `benchmark.py` 통합)** — 두 종류의 리포트를 자동 발송:
+  - **격주 금요일 08:42 KST · Standard** — 30일 초과 ~ 365일 이내 K-pop Shorts 후보
+    (ISO 홀수 주차만 실행)
+  - **월·수·금 (월 08:42 / 수 08:42 / 금 09:30 KST) · Recent** — 최근 0~7일 이내
+    신선한 콘텐츠
+- **오케스트레이터 (`send_report.py`)** — Weekly(YouTube 검색어 기반) + Benchmark(외부 참고
+  채널) 을 각각 subprocess 로 실행 → 상위 2탭 shell HTML 로 통합 → Gmail 발송 → 결과
+  `history/` 및 `benchmark/history/sent/` 에 영구 아카이브.
+- **타 채널 벤치마크 (`benchmark.py` 단독)** — 외부 참고 채널 (수동 + history 기반 자동)의
+  인기 Shorts 를 Apify 로 수집·분석해 "털어드림에 쓸 만한 참고 후보 + 기획 포인트" 리포트
+  생성. Standard·Recent 두 프로파일 지원.
 
 > 📌 Claude Code로 이 프로젝트를 이어서 작업한다면 먼저 **`CLAUDE.md`**를 읽으세요.
 > 작업 현황은 `docs/WORK_STATUS.md`, 운영 가이드는 `docs/OPERATIONS.md`,
@@ -15,22 +22,38 @@ K-pop Shorts 채널 **'털어드림'**의 콘텐츠 소싱을 자동화하는 �
 
 ## 주요 기능
 
-### 주간 메일러 (weekly.py)
-1. **매주 금요일 09:00 KST** GitHub Actions 자동 실행
-2. YouTube Data API v3로 **22개 검색어** 수집
-3. **Hard 필터** (코드 규칙) — 조회수 100만~500만, Shorts 길이, 한국어 제목,
-   업로드 기간(약 6~12개월 전, 부족 시 3개월 전까지 자동 확장), 채널/키워드 블록,
-   과거 발송 영상 자동 중복 제거(dedup)
-4. **Soft 필터** (Claude AI 분석) — 후보별 소재 유형·훅·변형 주제 등 분석 + 채택/탈락 판정
-5. 최종 후보를 이메일로 발송 (본문 표 + 첨부 인터랙티브 HTML 리포트)
-6. 결과를 `history/YYYY-MM-DD.json`으로 저장 (GitHub Actions가 자동 커밋)
+### 격주 금요일 Standard 리포트
+- **cron**: `42 23 * * 4` (목 23:42 UTC = **금 08:42 KST**) — ISO 홀수 주차만 실행 (`weekly.yml`)
+- **조건**: 조회수 **50만 ~ 900만**, 업로드 **30일 초과 ~ 365일 이내**, 길이 **15 ~ 180초**
+- **workflow_dispatch inputs** (수동 실행 시): `force_rescan` / `report_date` (slot 날짜 override)
+  / `notice` (본문 최상단 안내 박스) / `reissue` ([재발송] subject prefix)
+- **파이프라인**: `send_report.py --mode=friday` → benchmark(standard) → weekly(standard) →
+  통합 shell HTML → Gmail 발송 → 성공 시 `history/YYYY-MM-DD.json` + `benchmark/history/sent/YYYY-MM-DD_standard.json` 자동 커밋·push
 
-### 타 채널 벤치마크 (benchmark.py)
-1. 외부 참고 채널의 인기 Shorts를 **Apify**로 수집
-2. 참고 채널은 수동 지정 + `history/`에서 자동 추출(weekly가 자주 통과시킨 채널)
-3. 우리 채널·제외 채널 필터링 → Hard 필터 → Claude 분석
-4. 결과물(한 HTML 안에 2개 섹션): **① 참고 후보 리스트** / **② 기획 포인트 리포트**
-5. 산출물은 `benchmark/` 폴더에만 저장 (weekly와 완전 독립)
+### 월·수·금 Recent 리포트
+- **cron 3개** (`monday_recent.yml`):
+  - `42 23 * * 0` (일 23:42 UTC = **월 08:42 KST**)
+  - `42 23 * * 2` (화 23:42 UTC = **수 08:42 KST**)
+  - `30 0 * * 5` (금 00:30 UTC = **금 09:30 KST**) — 같은 금요일 Standard(08:42) 완료 후
+    concurrency group `teoldeurim-mailer` 로 자동 순차 실행
+- **조건**: 조회수 **5만 ~ 100만**, 업로드 **0 ~ 7일 이내**, 길이 **15 ~ 180초**
+- **파이프라인**: `send_report.py --mode=monday` (backward compat 상 이름 유지, 실제로는 월·수·금 공용)
+
+### 공통 필터 · dedup
+- **Hard 필터** (코드 규칙) — 조회수 범위, Shorts 길이, 한국어 제목, 업로드 기간,
+  채널·키워드 블록, 과거 발송 영상 자동 중복 제거
+- **컷 사유 안전 집계** — `collections.Counter` 로 새 reason 코드 추가에도 KeyError 없음
+- **Cross-profile dedup** — `history/*.json` (standard + `_recent`) + `benchmark/history/sent/*.json`
+  모두 통합 로드 → 재발송 방지. 월·수·금 recent 파일은 실행일별 분리 저장 (`YYYY-MM-DD_recent.json`)
+- **Soft 필터** (Claude AI 분석) — 후보별 소재 유형·훅·변형 주제 등 분석 + 채택/탈락 판정
+
+### 타 채널 벤치마크 (`benchmark.py`)
+1. 외부 참고 채널의 인기 Shorts 를 **Apify** (`streamers/youtube-shorts-scraper`) 로 수집
+2. 참고 채널은 **수동 지정 7개** (config/benchmark_config.py) + `history/` 에서 자동 추출
+   (weekly 가 자주 통과시킨 채널, `AUTO_REFERENCE_TOP_N` 로 상한 조절)
+3. 우리 채널·제외 채널 필터링 → MAX_VIEWS 상한 분리 → Hard 필터 → Claude 분석
+4. 결과물 (한 HTML 안에 2개 섹션): **① 참고 후보 리스트** / **② 기획 포인트 리포트**
+5. Standard · Recent 두 프로파일 지원 (조건 값만 다름, weekly 와 완전 독립)
 
 ---
 
@@ -79,7 +102,8 @@ Python 3.11 이상 필요. 의존성은 `anthropic` 하나뿐입니다.
 
 자동 실행을 쓰려면 레포 **Settings → Secrets and variables → Actions**에 시크릿을 등록합니다.
 
-- `weekly.yml` 사용: `YOUTUBE_API_KEY`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, `RECIPIENT_EMAIL`, `ANTHROPIC_API_KEY`
+- `weekly.yml` (Standard) · `monday_recent.yml` (Recent) 공통: `YOUTUBE_API_KEY`,
+  `APIFY_TOKEN`, `ANTHROPIC_API_KEY`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, `RECIPIENT_EMAIL`
 - `resend.yml` 사용: 위 + `RECIPIENT_EMAIL_SELF` (재발송 시 본인에게만 보내는 주소)
 
 **시크릿 등록 시 함정 (과거에 실제로 겪은 문제):**
@@ -116,8 +140,11 @@ python scripts/benchmark.py
 ### GitHub에서 수동 실행
 
 레포 **Actions** 탭 → 워크플로 선택 → **Run workflow**
-- `털어드림 주간 후보 메일링` — 정규 수집·발송 (옵션: `force_rescan`)
-- `털어드림 리포트 재발송 (본인만)` — 최신 history를 본인에게만 재발송
+- `털어드림 격주 통합 리포트 (금요일)` (weekly.yml) — Standard 실행. inputs:
+  `force_rescan` / `report_date` (예: `2026-07-17` 슬롯 재발송 시) / `notice` (본문 상단
+  안내 문구, literal `\n` → 개행) / `reissue` (`[재발송]` subject prefix)
+- `털어드림 최근 콘텐츠 리포트 (월·수·금)` (monday_recent.yml) — Recent 실행. inputs 없음
+- `털어드림 리포트 재발송 (본인만)` (resend.yml) — 최신 Standard history 를 본인에게만 재발송
 
 ---
 
@@ -137,10 +164,15 @@ python scripts/benchmark.py
 
 별도 서버 배포 없음 — **GitHub Actions cron**으로 운영됩니다.
 
-- `weekly.py`는 `.github/workflows/weekly.yml`의 `cron: '0 0 * * 5'` (금 00:00 UTC = 09:00 KST)로 자동 실행.
-- 코드를 `main`에 push하면 **다음 실행부터 즉시 반영**됩니다 (검증 없이 push 금지).
-- 실행 후 GitHub Actions가 `history/`를 자동 커밋·push 합니다.
-- 발송 시간 변경은 `weekly.yml`의 cron 표현식 수정.
+- **Standard**: `.github/workflows/weekly.yml`의 `cron: '42 23 * * 4'` (목 23:42 UTC = 금 08:42 KST).
+  ISO 홀수 주차만 실행 (`workflow_dispatch` 수동 실행은 격주 gate 우회).
+- **Recent (월·수·금)**: `.github/workflows/monday_recent.yml` 의 cron 3개 (일 23:42, 화 23:42,
+  금 00:30 UTC).
+- 두 workflow 는 `concurrency: group: teoldeurim-mailer` 를 공유 → 금요일에 겹치면 순차
+  실행 (Standard 08:42 완료 push 후 Recent 09:30 실행). push race 원천 차단.
+- 코드를 `main` 에 push 하면 **다음 실행부터 즉시 반영**됩니다 (검증 없이 push 금지).
+- 실행 후 GitHub Actions 가 `history/` 및 `benchmark/history/sent/` 를 자동 커밋·push 합니다
+  (`git pull --rebase --autostash` 로 다른 workflow 의 push 를 먼저 반영).
 
 > GitHub cron 정책: 60일간 레포에 변경이 없으면 cron이 자동 정지됨.
 > 이 봇은 매주 history를 커밋하므로 정상 운영 중에는 멈추지 않습니다.
@@ -149,12 +181,17 @@ python scripts/benchmark.py
 
 ## 설정 바꾸기
 
-- **주간 봇 필터/검색어** — `scripts/weekly.py` 상단의 `CONFIG` 딕셔너리 수정
-  (`MIN_VIEWS`, `MAX_VIEWS`, `MAX_DURATION_SEC`, `LOOKBACK_DAYS_*`, `CHANNEL_BLOCKLIST`,
-  `CHANNEL_ID_BLOCKLIST`, `TITLE_KEYWORD_BLOCKLIST`, `SEARCH_QUERIES` 등)
+- **Weekly 공통 설정** — `scripts/weekly.py` 상단의 `CONFIG` 딕셔너리
+  (`MIN_VIEWS`, `MAX_VIEWS`, `MAX_VIEWS_INCLUSIVE`, `MAX_DURATION_SEC`, `MIN_DURATION_SEC`,
+  `LOOKBACK_DAYS_*`, `CHANNEL_BLOCKLIST`, `CHANNEL_ID_BLOCKLIST`, `TITLE_KEYWORD_BLOCKLIST`,
+  `SEARCH_QUERIES` 등)
+- **Weekly 프로파일 override** — `WEEKLY_PROFILES["standard" | "recent"]` — 프로파일별 값만
+  덮어씀 (검색어 등 공통 필드는 CONFIG 상속)
 - **AI 분석 기준** — `weekly.py`의 `ANALYSIS_SYSTEM_PROMPT`
-- **벤치마크 설정** — `config/benchmark_config.py`의 `BENCHMARK_CONFIG`
-- 수정 후 push하면 다음 실행부터 적용됩니다.
+- **벤치마크 설정** — `config/benchmark_config.py` 의 `BENCHMARK_CONFIG` + `BENCHMARK_PROFILES`
+  (참고 채널 추가/삭제, MIN_VIEWS/MAX_VIEWS/UPLOADED_WITHIN 등)
+- 수정 후 push 하면 다음 실행부터 적용됩니다 — Standard 조건 변경은 특히 신중히
+  (금요일 정기 발송 결과에 즉시 영향).
 
 ---
 
