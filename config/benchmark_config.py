@@ -26,6 +26,10 @@ BENCHMARK_CONFIG = {
         {"name": "덕칼럼", "channel": "https://www.youtube.com/channel/UC0l_Io9P2rTbM82PoC9Bi4w"},
         {"name": "이센느", "channel": "https://www.youtube.com/@이센느"},
         {"name": "리센느서치P", "channel": "https://www.youtube.com/@리센느서치P"},
+        # 2026-08-05 대표님 요청 추가
+        {"name": "베몽몬", "channel": "https://www.youtube.com/@baemongmon"},
+        {"name": "팝픽", "channel": "https://www.youtube.com/@PopPickkk"},
+        {"name": "로로단", "channel": "https://www.youtube.com/@로로단"},
     ],
 
     # ========================================================================
