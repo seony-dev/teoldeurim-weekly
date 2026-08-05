@@ -1,0 +1,805 @@
+{
+  "date_kst": "2026-08-05",
+  "profile": "recent",
+  "generated_at_utc": "2026-08-05T01:19:33.997435+00:00",
+  "config": {
+    "min_views": 50000,
+    "max_views": 1000000,
+    "max_duration_seconds": 180,
+    "lookback_days_used": "0~8일 전 (fallback)",
+    "min_age_days_exclusive": null,
+    "uploaded_within_days": 7
+  },
+  "stats": {
+    "lookback_days": "0~8일 전 (fallback)",
+    "total_collected": 36,
+    "dedup_excluded": 4,
+    "total_after_filter": 3,
+    "hard_filter_excluded": 29,
+    "soft_filter_excluded": 1,
+    "final_count": 2
+  },
+  "candidates": [
+    {
+      "video_id": "377cjwVYWPA",
+      "url": "https://www.youtube.com/shorts/377cjwVYWPA",
+      "title": "멤버 탈퇴가 '오히려 좋아'인 여돌 멤버 #shorts",
+      "channel": "K팝과몰입러",
+      "channel_id": "UCLILKYP0GU5S5JrGFryBK_A",
+      "published_at": "2026-08-01T07:30:04Z",
+      "view_count": 771398,
+      "duration_seconds": 56,
+      "default_lang": "en",
+      "matched_queries": [
+        "케이팝 비하인드 shorts"
+      ],
+      "stage": "hard_passed",
+      "analysis": {
+        "topic_type": "관계성·계보 분석 (여돌 그룹 멤버 탈퇴)",
+        "title_pattern": "'멤버 탈퇴가 [반전 감정]인 [그룹/멤버]'",
+        "low_timeliness_reason": "멤버 탈퇴 후 남은 멤버의 포지션·수혜 구조는 그룹 존속 내내 재소환되는 장기 소재",
+        "channel_fit": "명세 '관계성·계보 분석' 정합. 탈퇴 이슈를 2차 해석(남은 멤버 수혜 구조)으로 재가공 가능",
+        "first_3sec_hook": "의외성형. 탈퇴 발표 자막 + '오히려 좋아' 리액션 컷 대비 편집",
+        "variation_topic": "멤버 탈퇴가 남은 멤버의 포지션·분량·서사에 어떤 구조적 이득을 주는지 K-pop 그룹 시스템 관점에서 해설",
+        "should_include": true,
+        "exclusion_reason": ""
+      },
+      "status_label": "최종 발송"
+    },
+    {
+      "video_id": "qyn5f3hqnBY",
+      "url": "https://www.youtube.com/shorts/qyn5f3hqnBY",
+      "title": "그래미를 걷어차버린 BTS, 진짜 이유가 있었다 #Shorts",
+      "channel": "카코",
+      "channel_id": "UCOwImoqpYwzfeGlNL4U4bXw",
+      "published_at": "2026-08-01T01:57:50Z",
+      "view_count": 180528,
+      "duration_seconds": 90,
+      "default_lang": "ko",
+      "matched_queries": [
+        "케이팝 숨겨진 이유 shorts"
+      ],
+      "stage": "hard_passed",
+      "analysis": {
+        "topic_type": "K-pop 산업 분석 (BTS / 그래미)",
+        "title_pattern": "'[권위상]을 걷어차버린 [아이돌], 진짜 이유가 있었다'",
+        "low_timeliness_reason": "BTS와 그래미의 관계는 서구 시상식 구조·K-pop 위상 변화라는 산업적 맥락으로 반복 소환되는 장기 소재",
+        "channel_fit": "명세 'K-pop 산업 분석' 정합. 1군 최정상 그룹 + 서구 시상식 구조 해설로 2차/3차 해석 확장 용이",
+        "first_3sec_hook": "의외성형. 그래미 로고 위에 X표시 + BTS 무대 컷 + '왜 안 갔을까' 자막",
+        "variation_topic": "BTS가 그래미와 거리를 두게 된 구조 — 수상 좌절 반복·인종적 편향·아미 여론 압력의 3중 맥락 해설",
+        "should_include": true,
+        "exclusion_reason": ""
+      },
+      "status_label": "최종 발송"
+    }
+  ],
+  "soft_excluded": [
+    {
+      "video_id": "PbX1GfZ7-Bk",
+      "url": "https://www.youtube.com/shorts/PbX1GfZ7-Bk",
+      "title": "대세 걸그룹 멤버가 실시간으로 영혼 가출해 버린 눈물겨운 진짜 이유 ㅋㅋㅋ #shorts",
+      "channel": "아이돌찐",
+      "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+      "published_at": "2026-07-29T12:00:01Z",
+      "view_count": 80899,
+      "duration_seconds": 40,
+      "default_lang": "ko",
+      "matched_queries": [
+        "걸그룹 비하인드 shorts"
+      ],
+      "stage": "hard_passed",
+      "analysis": {
+        "topic_type": "아이돌 일상 상황극 (대세 걸그룹 멤버, 인물 미상)",
+        "title_pattern": "'[대세 걸그룹 멤버]가 실시간으로 [행동] 해버린 [이유]'",
+        "low_timeliness_reason": "멤버의 특정 순간 리액션·페르소나는 시간이 지나도 밈처럼 반복 소비 가능",
+        "channel_fit": "일상 상황극·리액션 해설 각도로 접근 가능하나 인물 특정이 약해 분석 각도가 흐려짐",
+        "first_3sec_hook": "유머형. 멍때리는 멤버 얼굴 클로즈업 + '영혼 가출' 자막",
+        "variation_topic": "대세 걸그룹 멤버의 스케줄 과부하 순간을 페르소나·컨디션 관리 구조로 재해석",
+        "should_include": false,
+        "exclusion_reason": "제목에 인물·그룹 특정 없이 '대세 걸그룹 멤버' 낚시 톤 + 'ㅋㅋㅋ' 어그로 — 채널 분석형 톤과 부정합"
+      },
+      "status_label": "AI 컷",
+      "exclusion_reason": "제목에 인물·그룹 특정 없이 '대세 걸그룹 멤버' 낚시 톤 + 'ㅋㅋㅋ' 어그로 — 채널 분석형 톤과 부정합"
+    }
+  ],
+  "waitlist": [],
+  "report_lists": {
+    "dedup_excluded": [
+      {
+        "video_id": "bPTPbM4xOr4",
+        "url": "https://www.youtube.com/shorts/bPTPbM4xOr4",
+        "title": "백지헌이 짧은치마 무대에서 진짜 짜증이 났던 이유",
+        "channel": "나 잘한다해짜나",
+        "channel_id": "UC84G3UgA0hr84VJ_T_f1vrA",
+        "published_at": "2026-07-31T11:50:44Z",
+        "view_count": 937585,
+        "duration_seconds": 16,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts",
+          "아이돌 무대 비하인드 shorts"
+        ],
+        "stage": "dedup_excluded",
+        "analysis": {
+          "topic_type": "아이돌 고충 분석 (백지헌)",
+          "title_pattern": "'[아이돌]이 [특정 무대/의상]에서 진짜 [감정]났던 이유'",
+          "low_timeliness_reason": "무대 뒤 감정·의상 고충은 활동기마다 반복 소환되는 장기 소재",
+          "channel_fit": "명세 '아이돌 고충 분석' 정합. 1군 인물(르세라핌 백지헌) 특정 + 무대 뒷이야기 각도로 2차 해석 가능",
+          "first_3sec_hook": "의외성형. 백지헌 짧은치마 무대 클립 + '사실 이때 진짜 짜증났다는' 자막",
+          "variation_topic": "백지헌이 무대 의상·안무 조합에서 겪는 물리적·심리적 부담을 아이돌 여성 무대 의상 시스템 관점에서 해설",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "중복 제외",
+        "sent_date": "2026-08-03",
+        "exclusion_reason": "과거 발송 이력 중복 (2026-08-03 발송)"
+      },
+      {
+        "video_id": "ClSeCfHom-Q",
+        "url": "https://www.youtube.com/shorts/ClSeCfHom-Q",
+        "title": "외국인 아이돌이 고등학교 시절 은사님한테 제대로 박제당해 버린 감동적인 이유 #shorts",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-07-29T07:00:20Z",
+        "view_count": 129085,
+        "duration_seconds": 35,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts",
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "dedup_excluded",
+        "analysis": {
+          "topic_type": "아이돌 뒷이야기 (외국인 멤버, 추정)",
+          "title_pattern": "'[외국인 아이돌]이 고등학교 시절 [은사님]한테 제대로 박제당한 감동적인 이유'",
+          "low_timeliness_reason": "데뷔 전 학창시절 은사와의 인연은 시점과 무관하게 감동 서사로 재소비되는 영구 소재",
+          "channel_fit": "명세 '아이돌 뒷이야기' 정합. 외국인 멤버의 데뷔 전 서사를 감동·의외성 각도로 재구성 가능",
+          "first_3sec_hook": "의외성형. 고등학교 교실 사진 + 은사 인터뷰 자막 + '이 학생이 지금은...' 오버레이",
+          "variation_topic": "외국인 K-pop 멤버가 본국 학창시절 흔적을 통해 데뷔 서사로 재조명되는 구조 — 팬덤이 '학창시절 박제'를 소비하는 감정 메커니즘 분석",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "중복 제외",
+        "sent_date": "2026-07-31",
+        "exclusion_reason": "과거 발송 이력 중복 (2026-07-31 발송)"
+      },
+      {
+        "video_id": "k7j1ymwsQfI",
+        "url": "https://www.youtube.com/shorts/k7j1ymwsQfI",
+        "title": "외국인 아이돌이 편의점 어묵 사다가 제대로 고장 나버린 진짜 이유 ㅋㅋㅋ #shorts",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-07-29T02:00:10Z",
+        "view_count": 83886,
+        "duration_seconds": 38,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "dedup_excluded",
+        "analysis": {
+          "topic_type": "아이돌 일상 상황극 (외국인 멤버 한국 적응)",
+          "title_pattern": "'[외국인 아이돌]이 [한국 일상 상황]에서 제대로 고장 난 진짜 이유'",
+          "low_timeliness_reason": "외국인 멤버의 한국 문화 적응 에피소드는 시점과 무관하게 반복 소비되는 장기 소재",
+          "channel_fit": "명세 '아이돌 일상 상황극' 정합. 외국인 멤버 한국 문화 갭 구조를 2차 해석으로 풀 수 있음",
+          "first_3sec_hook": "유머형. 편의점 어묵 앞 당황한 표정 + '고장 났다는 진짜 이유' 자막",
+          "variation_topic": "외국인 K-pop 멤버들이 한국 편의점 문화에서 반복적으로 겪는 언어·결제·시식 시스템 차이 구조 해설",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "중복 제외",
+        "sent_date": "2026-08-03",
+        "exclusion_reason": "과거 발송 이력 중복 (2026-08-03 발송)"
+      },
+      {
+        "video_id": "lXJ13Mb7jJs",
+        "url": "https://www.youtube.com/shorts/lXJ13Mb7jJs",
+        "title": "첫 1위 순간, 예상 못한 엄마의 답변에 빵 터진 리센느 원이 🤣",
+        "channel": "팡팡토피아",
+        "channel_id": "UCWQAvpAMU8EU13z57fUmZaA",
+        "published_at": "2026-08-01T07:00:17Z",
+        "view_count": 72513,
+        "duration_seconds": 50,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 예상 못 한 반응 shorts"
+        ],
+        "stage": "dedup_excluded",
+        "analysis": {
+          "topic_type": "관계성·계보 분석 (RESCENE 원이 - 가족)",
+          "title_pattern": "'첫 [성취] 순간, 예상 못한 [관계인]의 답변에 [반응]한 [아이돌]'",
+          "low_timeliness_reason": "첫 1위 순간 가족 반응이라는 감정 서사는 데뷔 초부터 활동 내내 회상형으로 재소비되는 장기 콘텐츠",
+          "channel_fit": "명세 '관계성·팬-가족 상호작용' 정합. 1군 리스트 내 RESCENE 멤버의 감정 순간 + 예상 밖 반응 구조로 2차 해석 가능",
+          "first_3sec_hook": "의외성형. 1위 발표 환호 장면 + '엄마가 뭐라 했냐면...' 자막으로 반전 유도",
+          "variation_topic": "데뷔 신인 아이돌의 첫 1위 순간, 가족이 보이는 무덤덤·유머 반응이 반복되는 이유 — 연습생 장기 서포트 구조에서 오는 감정 패턴 해설",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "중복 제외",
+        "sent_date": "2026-08-03",
+        "exclusion_reason": "과거 발송 이력 중복 (2026-08-03 발송)"
+      }
+    ],
+    "hard_excluded": [
+      {
+        "video_id": "3LsPSmf8b1Y",
+        "url": "https://www.youtube.com/shorts/3LsPSmf8b1Y",
+        "title": "[세븐틴] 절반이 고장난 대환장 손오공 현장 #세븐틴 #seventeen",
+        "channel": "쫑순아 여기 밥하나 추가🍚",
+        "channel_id": "UCi7JD-tGbG7CopK8hHi82ow",
+        "published_at": "2026-07-29T11:47:36Z",
+        "view_count": 3051758,
+        "duration_seconds": 23,
+        "default_lang": "ko",
+        "matched_queries": [
+          "보이그룹 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 100만 초과 (3,051,758회)"
+      },
+      {
+        "video_id": "2g8UuVrSPlQ",
+        "url": "https://www.youtube.com/shorts/2g8UuVrSPlQ",
+        "title": "HOW DID KATSEYE DO THIS...? BTS 🥵🔥 #shorts #dance #kpop #behindthescenes #katseye",
+        "channel": "Sha Trio",
+        "channel_id": "UC0z9zaHN6pwUoyGVyO8P4AQ",
+        "published_at": "2026-08-01T04:30:21Z",
+        "view_count": 65299,
+        "duration_seconds": 21,
+        "default_lang": "en",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "한국어 제목 아님"
+      },
+      {
+        "video_id": "_NkUFsIHa3s",
+        "url": "https://www.youtube.com/shorts/_NkUFsIHa3s",
+        "title": "이상한 소리 내며 예능 기인으로 떡상한 걸그룹 멤버 ㅋㅋㅋ #shorts",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-07-30T12:00:26Z",
+        "view_count": 39107,
+        "duration_seconds": 39,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (39,107회)"
+      },
+      {
+        "video_id": "tfNKbcfDC90",
+        "url": "https://www.youtube.com/shorts/tfNKbcfDC90",
+        "title": "GUESS WHO GETS PULLD ? 🪢💟 TUTORIALS!  #shorts #kpop #viral  #behindthescenes #funny #singing",
+        "channel": "Sha Trio",
+        "channel_id": "UC0z9zaHN6pwUoyGVyO8P4AQ",
+        "published_at": "2026-07-30T10:00:30Z",
+        "view_count": 36891,
+        "duration_seconds": 18,
+        "default_lang": "en",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (36,891회)"
+      },
+      {
+        "video_id": "xLEVjr7stRA",
+        "url": "https://www.youtube.com/shorts/xLEVjr7stRA",
+        "title": "울컥해서 닭똥 같은 눈물 흘려버린 걸그룹 멤버 비주얼",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-08-03T02:00:01Z",
+        "view_count": 34170,
+        "duration_seconds": 39,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (34,170회)"
+      },
+      {
+        "video_id": "2x_R6i-ToyQ",
+        "url": "https://www.youtube.com/shorts/2x_R6i-ToyQ",
+        "title": "키즈카페 사장이 만든 아이돌 #Shorts",
+        "channel": "핫큐",
+        "channel_id": "UCmeibYrEVghuR931WurRpBw",
+        "published_at": "2026-07-31T23:30:04Z",
+        "view_count": 31140,
+        "duration_seconds": 29,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 데뷔 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (31,140회)"
+      },
+      {
+        "video_id": "MUKzUSl8bLs",
+        "url": "https://www.youtube.com/shorts/MUKzUSl8bLs",
+        "title": "살롱드립 원이 첫 정산금 발언에 장도연 눈물바다",
+        "channel": " 컷줍",
+        "channel_id": "UCFpE9-Ld_zUUJ1GIluSs0_A",
+        "published_at": "2026-07-30T00:46:42Z",
+        "view_count": 26295,
+        "duration_seconds": 42,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 눈물 순간 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (26,295회)"
+      },
+      {
+        "video_id": "4Dn_ARpby9w",
+        "url": "https://www.youtube.com/shorts/4Dn_ARpby9w",
+        "title": "흑역사 정면 돌파해 버리는 걸그룹 막내 ㅋㅋㅋ #shorts",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-07-31T12:00:33Z",
+        "view_count": 25567,
+        "duration_seconds": 53,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (25,567회)"
+      },
+      {
+        "video_id": "4SroAfGz_lA",
+        "url": "https://www.youtube.com/shorts/4SroAfGz_lA",
+        "title": "서인영 탈기춤 비하인드",
+        "channel": "KBS Joy",
+        "channel_id": "UCr0adenI5KeQFJkMIGjq5qw",
+        "published_at": "2026-07-29T09:00:31Z",
+        "view_count": 14961,
+        "duration_seconds": 38,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (14,961회)"
+      },
+      {
+        "video_id": "vJ_IZBtNqtM",
+        "url": "https://www.youtube.com/shorts/vJ_IZBtNqtM",
+        "title": "BTS, 팬캠으로 본 재미난 순간? 월드컵 하프타임쇼 비하인드 #BTS #worldcuphalftimeshow #fifa #방탄소년단  #Shorts",
+        "channel": "KOREA STORY ROOM",
+        "channel_id": "UC3eTFckFui1CqXeVDnSrN4w",
+        "published_at": "2026-07-28T22:00:17Z",
+        "view_count": 11706,
+        "duration_seconds": 54,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (11,706회)"
+      },
+      {
+        "video_id": "fe--76-3ZRg",
+        "url": "https://www.youtube.com/shorts/fe--76-3ZRg",
+        "title": "1분 애원 리센느 기적 #Shorts",
+        "channel": "핫큐",
+        "channel_id": "UCmeibYrEVghuR931WurRpBw",
+        "published_at": "2026-08-02T23:15:10Z",
+        "view_count": 10983,
+        "duration_seconds": 29,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 역주행 서사 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (10,983회)"
+      },
+      {
+        "video_id": "JYw-u4_Vl6c",
+        "url": "https://www.youtube.com/shorts/JYw-u4_Vl6c",
+        "title": "0.2kg 때문에 삭발까지 고민한 걸그룹 실화...? 😱",
+        "channel": "미니멀 웰빙",
+        "channel_id": "UCWqa7HWiLlgYL_i5VQ6ysjw",
+        "published_at": "2026-07-29T01:32:32Z",
+        "view_count": 10463,
+        "duration_seconds": 16,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (10,463회)"
+      },
+      {
+        "video_id": "TdlSotxq5Pk",
+        "url": "https://www.youtube.com/shorts/TdlSotxq5Pk",
+        "title": "이영지 노래 뺏은 앤톤 #앤톤 #라이즈 #이영지 #비하인드",
+        "channel": "기가막히게",
+        "channel_id": "UCx8N5PusAtPtPsq2ui5duQg",
+        "published_at": "2026-07-31T15:45:43Z",
+        "view_count": 7599,
+        "duration_seconds": 50,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (7,599회)"
+      },
+      {
+        "video_id": "MdF4-tUWmc8",
+        "url": "https://www.youtube.com/shorts/MdF4-tUWmc8",
+        "title": "히나 시요밍과 눈 마주친 순간 20251025 [#shorts 비하인드] #QWER #히나 #HINA #패션 #BEHIND",
+        "channel": "비하인드 BEHIND PICK",
+        "channel_id": "UCRalWBcI5VltukxQH1FoKmA",
+        "published_at": "2026-07-29T01:29:00Z",
+        "view_count": 6850,
+        "duration_seconds": 24,
+        "default_lang": "ja",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (6,850회)"
+      },
+      {
+        "video_id": "wK8t7RzdiI8",
+        "url": "https://www.youtube.com/shorts/wK8t7RzdiI8",
+        "title": "'방탄소년단 만들어줄게' — 리센느 데뷔 비하인드, 버클리 대표의 정체 #shorts",
+        "channel": "Daily Spotlight",
+        "channel_id": "UCShf-Rzvben2F9pJt7aoAJQ",
+        "published_at": "2026-07-30T12:30:33Z",
+        "view_count": 2637,
+        "duration_seconds": 64,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 데뷔 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (2,637회)"
+      },
+      {
+        "video_id": "BYaqAUiCY2E",
+        "url": "https://www.youtube.com/shorts/BYaqAUiCY2E",
+        "title": "버려진 테이프 하나로 140만 장 판 전설의 가수? #shorts  #그대를알고 #쇼츠  #노래 #명곡비하인드 #kpop",
+        "channel": "알고보면반전",
+        "channel_id": "UCNWUIBYhMME_AeWGe8gCxzQ",
+        "published_at": "2026-08-04T06:58:41Z",
+        "view_count": 2257,
+        "duration_seconds": 59,
+        "default_lang": "en",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (2,257회)"
+      },
+      {
+        "video_id": "rlKWZVjieJ4",
+        "url": "https://www.youtube.com/shorts/rlKWZVjieJ4",
+        "title": "쵸단 드럼 폭발 20251025 [#shorts 비하인드] #QWER #쵸단 #CHODAN #패션 #BEHIND",
+        "channel": "비하인드 BEHIND PICK",
+        "channel_id": "UCRalWBcI5VltukxQH1FoKmA",
+        "published_at": "2026-07-29T01:23:58Z",
+        "view_count": 1774,
+        "duration_seconds": 18,
+        "default_lang": "ja",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,774회)"
+      },
+      {
+        "video_id": "NyYuz6JAVpg",
+        "url": "https://www.youtube.com/shorts/NyYuz6JAVpg",
+        "title": "메가커피 촬영 비하인드 오시온 모음집 #nctwish #kpop #sion #시온 #nct #엔시티위시 #shorts #메가커피",
+        "channel": "시시",
+        "channel_id": "UCcIunZ_XPvI91KFGfcTvhyw",
+        "published_at": "2026-07-30T09:10:43Z",
+        "view_count": 1752,
+        "duration_seconds": 24,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,752회)"
+      },
+      {
+        "video_id": "VeDihcC4DGc",
+        "url": "https://www.youtube.com/shorts/VeDihcC4DGc",
+        "title": "본인들의 서사가 담긴 곡 one day #하입프린세스 #서사 #역주행 #아이돌 #shorts",
+        "channel": "랩 잘하는 바부 토끼",
+        "channel_id": "UCki1KRWt67nU7uRY7ITviDg",
+        "published_at": "2026-07-30T08:15:22Z",
+        "view_count": 1717,
+        "duration_seconds": 59,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 역주행 서사 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,717회)"
+      },
+      {
+        "video_id": "ozqLNdSIeTQ",
+        "url": "https://www.youtube.com/shorts/ozqLNdSIeTQ",
+        "title": "루네이트 스니커즈 안무 비하인드 #shorts",
+        "channel": "아이돌 라디오 유니버스 IDOL RADIO UNIVERSE",
+        "channel_id": "UCSG0f3bvUvbSle58ETp9z2w",
+        "published_at": "2026-07-30T10:00:37Z",
+        "view_count": 1598,
+        "duration_seconds": 39,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts",
+          "아이돌 안무 비하인드 shorts",
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,598회)"
+      },
+      {
+        "video_id": "iI7QbcZXSNw",
+        "url": "https://www.youtube.com/shorts/iI7QbcZXSNw",
+        "title": "요즘 아이돌 연습생 라이브 실력",
+        "channel": "이케맨저점매수",
+        "channel_id": "UCd_oEAhz_genwliqo0XTn1w",
+        "published_at": "2026-07-28T09:19:55Z",
+        "view_count": 1438,
+        "duration_seconds": 21,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 라이브 실력 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,438회)"
+      },
+      {
+        "video_id": "x8Dcfz35DLk",
+        "url": "https://www.youtube.com/shorts/x8Dcfz35DLk",
+        "title": "회식 자리에서 술 마시다 대박 터진 '말춤' 탄생 비하인드 🐎 #shorts #쇼츠 #명곡비하인드 #음악비하인드",
+        "channel": "알고보면반전",
+        "channel_id": "UCNWUIBYhMME_AeWGe8gCxzQ",
+        "published_at": "2026-07-31T08:26:08Z",
+        "view_count": 1256,
+        "duration_seconds": 55,
+        "default_lang": "en",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,256회)"
+      },
+      {
+        "video_id": "SYuTVS8M1lI",
+        "url": "https://www.youtube.com/shorts/SYuTVS8M1lI",
+        "title": "아이돌 = 팬한테 하트 갈겨주는 직업 #shorts",
+        "channel": "333equals9",
+        "channel_id": "UCobkGVZQeBWR5lkOG77Ax9A",
+        "published_at": "2026-07-30T08:30:14Z",
+        "view_count": 192,
+        "duration_seconds": 22,
+        "default_lang": "en",
+        "matched_queries": [
+          "아이돌 팬한테 부탁 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (192회)"
+      },
+      {
+        "video_id": "9AUJFwIjW2I",
+        "url": "https://www.youtube.com/shorts/9AUJFwIjW2I",
+        "title": "원이가 말해주는 프리티걸 리메이크 비하인드",
+        "channel": "삼촌이좋아서그냥만들았어",
+        "channel_id": "UCkfPxyxAPNPjvmXYoJftswQ",
+        "published_at": "2026-07-28T15:15:23Z",
+        "view_count": 176,
+        "duration_seconds": 34,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts",
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (176회)"
+      },
+      {
+        "video_id": "Ok4Cg1OekcQ",
+        "url": "https://www.youtube.com/shorts/Ok4Cg1OekcQ",
+        "title": "짐 싸고 내려갔던 연습생 시절의 눈물 #shorts #리센느 #rescene",
+        "channel": "리센느 팬페",
+        "channel_id": "UCz2-gIa0ZFOvuCqzPonCASQ",
+        "published_at": "2026-08-03T12:09:11Z",
+        "view_count": 96,
+        "duration_seconds": 42,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 연습생 시절 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (96회)"
+      },
+      {
+        "video_id": "Rpkd0PC7XmE",
+        "url": "https://www.youtube.com/shorts/Rpkd0PC7XmE",
+        "title": "챌린지 비하인드#챌린지#백상아리#쇼츠#shorts#비하인드영상",
+        "channel": "가윤",
+        "channel_id": "UCv21-n0hTj0GSk0vzLYe_EQ",
+        "published_at": "2026-07-30T09:28:03Z",
+        "view_count": 58,
+        "duration_seconds": 54,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (58회)"
+      },
+      {
+        "video_id": "c5Bm5JIm_-M",
+        "url": "https://www.youtube.com/shorts/c5Bm5JIm_-M",
+        "title": "연습생 시절 버텨내고 첫 정산금 전액 플렉스한 사연 #shorts #쇼츠 #아이돌 #실화 #미담",
+        "channel": "헤이훕",
+        "channel_id": "UC6qoEUu8isNTqyTW8PXtIQA",
+        "published_at": "2026-08-04T14:30:22Z",
+        "view_count": 7,
+        "duration_seconds": 21,
+        "default_lang": "en-US",
+        "matched_queries": [
+          "아이돌 연습생 시절 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (7회)"
+      },
+      {
+        "video_id": "YMfJBVQs0l8",
+        "url": "https://www.youtube.com/shorts/YMfJBVQs0l8",
+        "title": "\"새 상 다가진 척 해야지\" 😂 촬영 준비하는 비하인드 #Shorts",
+        "channel": "SoundBite Sessions",
+        "channel_id": "UCDtjc5U7SjI88b6i3yhev0g",
+        "published_at": "2026-07-28T19:07:26Z",
+        "view_count": 1,
+        "duration_seconds": 17,
+        "default_lang": "en",
+        "matched_queries": [
+          "아이돌 비하인드 shorts",
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1회)"
+      },
+      {
+        "video_id": "2vEeAQI3LvY",
+        "url": "https://www.youtube.com/shorts/2vEeAQI3LvY",
+        "title": "\"언니 너무 예뻤어!\" 인트로 직전 텐션 폭발하는 순간 😆 #Shorts",
+        "channel": "SoundBite Sessions",
+        "channel_id": "UCDtjc5U7SjI88b6i3yhev0g",
+        "published_at": "2026-07-30T06:29:09Z",
+        "view_count": 1,
+        "duration_seconds": 25,
+        "default_lang": "en",
+        "matched_queries": [
+          "아이돌 비하인드 shorts",
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1회)"
+      }
+    ],
+    "hard_passed": [
+      {
+        "video_id": "377cjwVYWPA",
+        "url": "https://www.youtube.com/shorts/377cjwVYWPA",
+        "title": "멤버 탈퇴가 '오히려 좋아'인 여돌 멤버 #shorts",
+        "channel": "K팝과몰입러",
+        "channel_id": "UCLILKYP0GU5S5JrGFryBK_A",
+        "published_at": "2026-08-01T07:30:04Z",
+        "view_count": 771398,
+        "duration_seconds": 56,
+        "default_lang": "en",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_passed",
+        "analysis": {
+          "topic_type": "관계성·계보 분석 (여돌 그룹 멤버 탈퇴)",
+          "title_pattern": "'멤버 탈퇴가 [반전 감정]인 [그룹/멤버]'",
+          "low_timeliness_reason": "멤버 탈퇴 후 남은 멤버의 포지션·수혜 구조는 그룹 존속 내내 재소환되는 장기 소재",
+          "channel_fit": "명세 '관계성·계보 분석' 정합. 탈퇴 이슈를 2차 해석(남은 멤버 수혜 구조)으로 재가공 가능",
+          "first_3sec_hook": "의외성형. 탈퇴 발표 자막 + '오히려 좋아' 리액션 컷 대비 편집",
+          "variation_topic": "멤버 탈퇴가 남은 멤버의 포지션·분량·서사에 어떤 구조적 이득을 주는지 K-pop 그룹 시스템 관점에서 해설",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "최종 발송"
+      },
+      {
+        "video_id": "qyn5f3hqnBY",
+        "url": "https://www.youtube.com/shorts/qyn5f3hqnBY",
+        "title": "그래미를 걷어차버린 BTS, 진짜 이유가 있었다 #Shorts",
+        "channel": "카코",
+        "channel_id": "UCOwImoqpYwzfeGlNL4U4bXw",
+        "published_at": "2026-08-01T01:57:50Z",
+        "view_count": 180528,
+        "duration_seconds": 90,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 숨겨진 이유 shorts"
+        ],
+        "stage": "hard_passed",
+        "analysis": {
+          "topic_type": "K-pop 산업 분석 (BTS / 그래미)",
+          "title_pattern": "'[권위상]을 걷어차버린 [아이돌], 진짜 이유가 있었다'",
+          "low_timeliness_reason": "BTS와 그래미의 관계는 서구 시상식 구조·K-pop 위상 변화라는 산업적 맥락으로 반복 소환되는 장기 소재",
+          "channel_fit": "명세 'K-pop 산업 분석' 정합. 1군 최정상 그룹 + 서구 시상식 구조 해설로 2차/3차 해석 확장 용이",
+          "first_3sec_hook": "의외성형. 그래미 로고 위에 X표시 + BTS 무대 컷 + '왜 안 갔을까' 자막",
+          "variation_topic": "BTS가 그래미와 거리를 두게 된 구조 — 수상 좌절 반복·인종적 편향·아미 여론 압력의 3중 맥락 해설",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "최종 발송"
+      },
+      {
+        "video_id": "PbX1GfZ7-Bk",
+        "url": "https://www.youtube.com/shorts/PbX1GfZ7-Bk",
+        "title": "대세 걸그룹 멤버가 실시간으로 영혼 가출해 버린 눈물겨운 진짜 이유 ㅋㅋㅋ #shorts",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-07-29T12:00:01Z",
+        "view_count": 80899,
+        "duration_seconds": 40,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts"
+        ],
+        "stage": "hard_passed",
+        "analysis": {
+          "topic_type": "아이돌 일상 상황극 (대세 걸그룹 멤버, 인물 미상)",
+          "title_pattern": "'[대세 걸그룹 멤버]가 실시간으로 [행동] 해버린 [이유]'",
+          "low_timeliness_reason": "멤버의 특정 순간 리액션·페르소나는 시간이 지나도 밈처럼 반복 소비 가능",
+          "channel_fit": "일상 상황극·리액션 해설 각도로 접근 가능하나 인물 특정이 약해 분석 각도가 흐려짐",
+          "first_3sec_hook": "유머형. 멍때리는 멤버 얼굴 클로즈업 + '영혼 가출' 자막",
+          "variation_topic": "대세 걸그룹 멤버의 스케줄 과부하 순간을 페르소나·컨디션 관리 구조로 재해석",
+          "should_include": false,
+          "exclusion_reason": "제목에 인물·그룹 특정 없이 '대세 걸그룹 멤버' 낚시 톤 + 'ㅋㅋㅋ' 어그로 — 채널 분석형 톤과 부정합"
+        },
+        "status_label": "AI 컷",
+        "exclusion_reason": "제목에 인물·그룹 특정 없이 '대세 걸그룹 멤버' 낚시 톤 + 'ㅋㅋㅋ' 어그로 — 채널 분석형 톤과 부정합"
+      }
+    ]
+  }
+}
