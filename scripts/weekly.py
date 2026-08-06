@@ -128,7 +128,7 @@ CONFIG = {
 # 프로파일 — WEEKLY_PROFILE env 기준 CONFIG override.
 # ----------------------------------------------------------------------------
 # - "standard" (default): 위 CONFIG 그대로 (backward compat, 격주 금요일 08:42 KST)
-# - "recent": 월·수·금 최근 콘텐츠 통합 리포트용 (0~7일, 조회수 5만~100만, 최신순)
+# - "recent": 월·수·금 최근 콘텐츠 통합 리포트용 (0~7일, 조회수 5만~300만, 최신순)
 #     · 월 08:42 KST / 수 08:42 KST / 금 09:30 KST 실행 (2026-07-21 확장)
 #     · 발송 history 는 실행일별로 분리 저장(`YYYY-MM-DD_recent.json`) —
 #       월·수·금끼리 서로 dedup 자동 성립, standard 와도 cross-profile dedup.
@@ -155,9 +155,9 @@ WEEKLY_PROFILES = {
         #   MIN_VIEWS 10만 → 5만 (더 넓은 발굴)
         #   UPLOADED_WITHIN_DAYS 30일 → 7일 (더 신선한 콘텐츠)
         "MIN_VIEWS": 50_000,
-        "MAX_VIEWS": 1_000_000,
-        # 상한 판정: recent 는 inclusive (views > MAX_VIEWS → cut) — 사용자 스펙 "1M 이하" 준수.
-        # 정확히 1_000_000 view 는 pass.
+        "MAX_VIEWS": 3_000_000,   # 2026-08-06 대표님 요청: 1M → 3M 상향
+        # 상한 판정: recent 는 inclusive (views > MAX_VIEWS → cut) — 사용자 스펙 "3M 이하" 준수.
+        # 정확히 3_000_000 view 는 pass.
         "MAX_VIEWS_INCLUSIVE": True,
         # API pull: 0~8일 (buffer +1). 최종 판정은 로컬 timestamp.
         "LOOKBACK_DAYS_OLDEST": 8,
@@ -518,8 +518,8 @@ def hard_filter_reason(row, now=None):
     # 상한 판정은 profile 의 MAX_VIEWS_INCLUSIVE 로 스위칭:
     #   · standard (False): views >= MAX_VIEWS → cut. 정확히 9,000,000 은 컷 (기존 동작 유지).
     #     문구: "900만 이상"
-    #   · recent   (True):  views >  MAX_VIEWS → cut. 정확히 1,000,000 은 pass (사용자 스펙 "이하").
-    #     문구: "100만 초과"
+    #   · recent   (True):  views >  MAX_VIEWS → cut. 정확히 3,000,000 은 pass (사용자 스펙 "이하").
+    #     문구: "300만 초과"
     max_v = CONFIG["MAX_VIEWS"]
     if CONFIG.get("MAX_VIEWS_INCLUSIVE", False):
         if v > max_v:

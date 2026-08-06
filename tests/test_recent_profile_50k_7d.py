@@ -3,7 +3,7 @@
 
 지키는 원칙:
   · Weekly Standard 판정 결과는 **완전히 이전과 동일** — 특히 정확히 9,000,000회는 컷.
-  · Weekly Recent: MIN_VIEWS 50_000 / MAX_VIEWS 1_000_000 (inclusive, "이하").
+  · Weekly Recent: MIN_VIEWS 50_000 / MAX_VIEWS 3_000_000 (inclusive, "이하"). 2026-08-06 상향.
   · UPLOADED_WITHIN_DAYS=7 (정확히 7일 pass, 7일 + 1초 cut).
   · MIN_AGE_DAYS_EXCLUSIVE=None (업로드 당일 = age 0일 포함).
   · MIN/MAX duration 15/180 유지.
@@ -52,8 +52,8 @@ print("=" * 78)
 weekly._apply_weekly_profile("recent")
 chk("W-P-01: weekly recent MIN_VIEWS=50_000",
     weekly.CONFIG["MIN_VIEWS"] == 50_000)
-chk("W-P-02: weekly recent MAX_VIEWS=1_000_000",
-    weekly.CONFIG["MAX_VIEWS"] == 1_000_000)
+chk("W-P-02: weekly recent MAX_VIEWS=3_000_000 (2026-08-06 상향)",
+    weekly.CONFIG["MAX_VIEWS"] == 3_000_000)
 chk("W-P-03: weekly recent UPLOADED_WITHIN_DAYS=7",
     weekly.CONFIG["UPLOADED_WITHIN_DAYS"] == 7)
 chk("W-P-04: weekly recent MIN_AGE_DAYS_EXCLUSIVE=None",
@@ -79,7 +79,7 @@ chk("W-S-05: weekly standard MAX_VIEWS_INCLUSIVE=False (기존 exclusive 유지)
 # benchmark recent
 bm_r = benchmark_config.resolve_config("recent")
 chk("B-P-01: benchmark recent MIN_VIEWS=50_000", bm_r["MIN_VIEWS"] == 50_000)
-chk("B-P-02: benchmark recent MAX_VIEWS=1_000_000", bm_r["MAX_VIEWS"] == 1_000_000)
+chk("B-P-02: benchmark recent MAX_VIEWS=3_000_000 (2026-08-06 상향)", bm_r["MAX_VIEWS"] == 3_000_000)
 chk("B-P-03: benchmark recent UPLOADED_WITHIN_DAYS=7", bm_r["UPLOADED_WITHIN_DAYS"] == 7)
 chk("B-P-04: benchmark recent MIN_AGE_DAYS_EXCLUSIVE=None",
     bm_r["MIN_AGE_DAYS_EXCLUSIVE"] is None)
@@ -168,7 +168,7 @@ for delta, expect_pass, label in std_age:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 4. Weekly Recent — 조회수 경계 (5만 이상 ~ 100만 이하)
+# 4. Weekly Recent — 조회수 경계 (5만 이상 ~ 300만 이하)
 # ═══════════════════════════════════════════════════════════════════
 print()
 print("=" * 78)
@@ -181,9 +181,10 @@ REC_VIEW = [
     (50_000,    True,  "50,000 → pass (하한 경계 inclusive)"),
     (50_001,    True,  "50,001 → pass"),
     (500_000,   True,  "500,000 → pass"),
-    (999_999,   True,  "999,999 → pass"),
-    (1_000_000, True,  "1,000,000 → pass (상한 경계 inclusive)"),
-    (1_000_001, False, "1,000,001 → cut"),
+    (1_000_000, True,  "1,000,000 → pass (이전 상한, 지금은 여유)"),
+    (2_999_999, True,  "2,999,999 → pass"),
+    (3_000_000, True,  "3,000,000 → pass (상한 경계 inclusive, 2026-08-06)"),
+    (3_000_001, False, "3,000,001 → cut"),
 ]
 for views, expect_pass, label in REC_VIEW:
     # recent 통과 범위 age (3일)
@@ -380,10 +381,10 @@ import send_report
 body = send_report._monday_body_html("2026-07-22", 5, 3, True, True)
 chk("STR-03: monday body 에 '7일 이내' + '월·수·금' 명시",
     "0일 ~ 7일 이내" in body and "월·수·금" in body)
-chk("STR-04: monday body 에 '조회수 5만~100만' + '업로드 0~7일'",
-    "5만~100만" in body and "0~7일" in body)
-chk("STR-05: 이전 30일/10만 흔적 없음",
-    "30일 이내" not in body and "10만~100만" not in body)
+chk("STR-04: monday body 에 '조회수 5만~300만' + '업로드 0~7일'",
+    "5만~300만" in body and "0~7일" in body)
+chk("STR-05: 이전 30일/10만/100만 흔적 없음",
+    "30일 이내" not in body and "10만~100만" not in body and "5만~100만" not in body)
 
 
 # ═══════════════════════════════════════════════════════════════════

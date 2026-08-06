@@ -147,7 +147,7 @@ BENCHMARK_PROFILES = {
         "MAX_SHORTS_PER_CHANNEL": 50,
         "MAX_TOTAL_RAW": 30,
         "MIN_VIEWS": 50_000,
-        "MAX_VIEWS": 1_000_000,
+        "MAX_VIEWS": 3_000_000,
         "MAX_DURATION_SEC": 180,
         "MIN_DURATION_SEC": 15,
         # 업로드 age 범위: 0일 ≤ age ≤ 7일. 정확히 7일 timestamp도 여기 포함.

@@ -568,7 +568,7 @@ def _monday_body_html(date_slug, wk_count, bm_count, wk_ok, bm_ok):
     # 정상 0건 표시 (실패와 구분)
     zero_notes = []
     if wk_ok and wk_count == 0:
-        zero_notes.append("Weekly 최근 후보 <b>0건</b> — 최근 7일 이내 조건(조회수 5만~100만)에 맞는 새 영상이 없습니다.")
+        zero_notes.append("Weekly 최근 후보 <b>0건</b> — 최근 7일 이내 조건(조회수 5만~300만)에 맞는 새 영상이 없습니다.")
     if bm_ok and bm_count == 0:
         zero_notes.append("타 채널 Benchmark 최근 후보 <b>0건</b> — 최근 7일 이내 조건에 맞는 새 영상이 없습니다.")
     zero_block = ""
@@ -584,7 +584,7 @@ def _monday_body_html(date_slug, wk_count, bm_count, wk_ok, bm_ok):
 <ul>
   <li>Weekly 최근 후보: {wk_count if wk_ok else "실행 실패"}건 (YouTube 검색어 기반, 최신 업로드 순)</li>
   <li>타 채널 Benchmark 최근 후보: {bm_count if bm_ok else "실행 실패"}건 (4채널 · 최신 업로드 순)</li>
-  <li>조건: 조회수 5만~100만, 업로드 0~7일</li>
+  <li>조건: 조회수 5만~300만, 업로드 0~7일</li>
   <li>중복 제외: 과거 Weekly 발송 + 이전 Benchmark 리포트 이력 (cross-profile dedup)</li>
 </ul>
 {zero_block}
