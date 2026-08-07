@@ -671,7 +671,7 @@ def hard_filter(videos, now):
 
 
 def apply_max_views_filter(videos):
-    """MAX_VIEWS 초과 영상을 분리한다 (Hard 필터 이전, MAX_TOTAL_RAW 캡 이전).
+    """MAX_VIEWS 초과 영상을 분리한다 (Hard 필터 이전).
 
     제거가 아니라 분리 — 리포트 탭 '조회수 초과 제외'에 별도 표시.
     각 제외 영상에 exclusion_reason 필드를 부여한다.
@@ -1894,7 +1894,7 @@ def main():
 
     # 전체 수집 풀 스냅샷 — "수집 전체" 탭이 가리키는 데이터
     # (Apify가 반환하고 제외채널 필터를 통과한 모든 영상의 superset.
-    #  이후 MAX_VIEWS/MAX_TOTAL_RAW/Hard 컷이 이 풀의 부분집합으로 나타남)
+    #  이후 MAX_VIEWS 초과 분리 / Hard 컷이 이 풀의 부분집합으로 나타남)
     all_collected_pool = list(kept)
 
     # ── STEP 2.5. MAX_VIEWS 필터 (대표님 요청: 뻔한 영상 제외) ──
@@ -1908,12 +1908,12 @@ def main():
         print("⚠️ MAX_VIEWS 필터 후 남은 영상이 없습니다 — "
               "리포트는 '조회수 초과 제외' 탭만 채워 생성합니다 (분석/최종 후보 0건).")
 
-    # MAX_TOTAL_RAW 상한 — kept가 있을 때만 적용 (빈 리스트 sort 회피)
+    # 조회수 상위부터 정렬 (Hard 필터 결과 리포트 노출 순서 결정용).
+    # 2026-08-07 대표님 요청으로 MAX_TOTAL_RAW 상한 완전 제거 — 초창기 2채널×15=30 기준의
+    # 안전 상한이었으나 8채널 확장 후 후보 다양성을 과도하게 제한하고 있었음.
+    # Claude 분석 비용 상한은 MAX_ANALYSIS_CANDIDATES 로 별도 통제됨.
     if kept:
         kept.sort(key=lambda v: v["views"], reverse=True)
-        if len(kept) > CFG["MAX_TOTAL_RAW"]:
-            print(f"  수집 상한 적용: {len(kept)}개 → 조회수 상위 {CFG['MAX_TOTAL_RAW']}개")
-            kept = kept[:CFG["MAX_TOTAL_RAW"]]
 
     # ── STEP 3. 지표 계산 (전체 풀 일괄 — dict 공유라 kept/excluded에 모두 반영) ──
     print("\n[STEP 3] 벤치마크 지표 계산")
@@ -1927,7 +1927,6 @@ def main():
         "MAX_VIEWS": CFG.get("MAX_VIEWS", 0),
         "MIN_VIEWS": CFG.get("MIN_VIEWS", 0),
         "MAX_SHORTS_PER_CHANNEL": CFG.get("MAX_SHORTS_PER_CHANNEL", 0),
-        "MAX_TOTAL_RAW": CFG.get("MAX_TOTAL_RAW", 0),
         "MAX_DURATION_SEC": CFG.get("MAX_DURATION_SEC", 0),
         "MIN_DURATION_SEC": CFG.get("MIN_DURATION_SEC", 0),
         # 업로드 age 필터 (사용자-facing "업로드 직후 ~ N일" / "M일 초과 ~ N일" 표시용).

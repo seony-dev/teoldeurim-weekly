@@ -51,7 +51,7 @@
 
 1. **benchmark.py + config/ git 커밋** — 현재 untracked 상태.
 2. **`config/benchmark_config.py` 운영값 원복** — 현재 `[테스트값]`이 적용돼 있음
-   (`MAX_SHORTS_PER_CHANNEL`, `MAX_TOTAL_RAW`, `MIN_VIEWS`, `MAX_ANALYSIS_CANDIDATES`,
+   (`MAX_SHORTS_PER_CHANNEL`, `MIN_VIEWS`, `MAX_ANALYSIS_CANDIDATES`,
    `FINAL_CANDIDATES`). 운영 전 주석에 적힌 권장값으로 되돌릴 것.
 3. **`REFERENCE_CHANNELS` 수동 채널 등록 여부 결정** — 현재 비어 있음(자동 추출만 사용 중).
 4. **`benchmark.yml` GitHub Actions 워크플로 작성** — 벤치마크 자동/수동 실행용. 미작성.

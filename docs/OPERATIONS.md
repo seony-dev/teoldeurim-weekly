@@ -60,7 +60,6 @@ python scripts/benchmark.py
 `config/benchmark_config.py`에서 다음 값을 낮추면 비용·시간이 줄어듭니다
 (현재 파일에는 `[테스트값]` 주석으로 표시된 임시값이 들어가 있을 수 있음):
 - `MAX_SHORTS_PER_CHANNEL` (채널당 수집 수)
-- `MAX_TOTAL_RAW` (전체 수집 상한)
 - `MAX_ANALYSIS_CANDIDATES` (Claude 분석 수 = 비용의 핵심 변수)
 - `FINAL_CANDIDATES` (리포트 노출 수)
 - `MIN_VIEWS` (조회수 하한)

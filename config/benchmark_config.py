@@ -86,9 +86,10 @@ BENCHMARK_CONFIG = {
     "SORT_BY": "POPULAR",
     "MAX_SHORTS_PER_CHANNEL": 50,   # 메가급 채널의 4M 이하 후보 확보 위해 상향
                                     # (이전 15도 패션탐정냥/덕칼럼은 상위 15개가 모두 400만 초과)
-                                    # 2채널 × 50 = 100 items 최대 수집
-    "MAX_TOTAL_RAW": 30,            # [테스트값] 운영 권장 75 — 초과 시 조회수 상위로 컷
-                                    # (2채널×15=30 기준이라 캡 효과 미미. 자동 채널 켜질 때 재조정)
+                                    # 8채널 × 50 = 400 items 최대 수집
+    # (2026-08-07: MAX_TOTAL_RAW 상한 완전 제거. 초창기 2채널×15=30 기준의 안전값이었으나
+    #  8채널로 확장하며 후보 다양성을 과도하게 제한하고 있었음. Claude 분석 비용 상한은
+    #  MAX_ANALYSIS_CANDIDATES 로 별도 통제되므로 API 비용 영향 없음.)
 
     # ========================================================================
     # Hard 필터 — 수집 후 로컬에서 적용 (Claude 분석 전 1차 컷)
@@ -96,7 +97,7 @@ BENCHMARK_CONFIG = {
     "MIN_VIEWS": 500_000,           # [테스트값] 운영 권장 100_000 (10만) → 50만으로 상향 (26.07.14)
     "MAX_VIEWS": 9_000_000,         # 조회수 상한 400만 → 900만으로 상향 (26.07.14)
                                     # (초대형 조회수 영상은 너무 뻔해서 후보 제외)
-                                    # MAX_TOTAL_RAW 컷 이전에 적용됨 (4M 이하 후보 확보)
+                                    # Hard 필터 이전에 별도 분리 (리포트 '조회수 초과 제외' 탭)
     "MAX_DURATION_SEC": 180,        # Shorts 형식 (상한)
     "MIN_DURATION_SEC": 15,         # 15초 미만 초단타 영상 제외 (26.07.15, 대표님 요청)
                                     # 최종 길이 조건: 15초 이상 ~ 180초 이하
@@ -131,7 +132,6 @@ BENCHMARK_PROFILES = {
     "standard": {
         "SORT_BY": "POPULAR",
         "MAX_SHORTS_PER_CHANNEL": 50,
-        "MAX_TOTAL_RAW": 30,
         "MIN_VIEWS": 500_000,
         "MAX_VIEWS": 9_000_000,
         "MAX_DURATION_SEC": 180,
@@ -147,7 +147,6 @@ BENCHMARK_PROFILES = {
     "recent": {
         "SORT_BY": "NEWEST",
         "MAX_SHORTS_PER_CHANNEL": 50,
-        "MAX_TOTAL_RAW": 30,
         "MIN_VIEWS": 50_000,
         "MAX_VIEWS": 3_000_000,
         "MAX_DURATION_SEC": 180,
