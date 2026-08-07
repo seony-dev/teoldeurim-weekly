@@ -21,6 +21,12 @@ on:
     - cron: '42 23 * * 2'   # 화요일 23:42 UTC = 수요일 08:42 KST
     - cron: '42 23 * * 4'   # 목요일 23:42 UTC = 금요일 08:42 KST
   workflow_dispatch:
+    inputs:
+      recipient_override:
+        description: '(선택) 이번 실행만 이 주소로 발송 (검증용). 비면 기본 RECIPIENT_EMAIL 사용. 여러 명 지정 시 쉼표로.'
+        type: string
+        required: false
+        default: ''
 
 # weekly.yml (격주 금 standard) 와 같은 concurrency group 공유 —
 # 금요일 순서: Recent(08:42) 먼저 실행 → 완료 후 Standard(08:47) 실행.
@@ -97,7 +103,11 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+          # recipient_override input 이 있으면 그 주소로만 발송 (검증용). 비면 기본 RECIPIENT_EMAIL.
+          RECIPIENT_EMAIL: ${{ github.event.inputs.recipient_override != '' && github.event.inputs.recipient_override || secrets.RECIPIENT_EMAIL }}
+          # recipient_override 지정 시 자동으로 FORCE_RESCAN=1 — 이미 오늘자 history 가 있어도
+          # 새 코드로 수집·분석을 다시 돌려야 override 실행의 의미가 있음.
+          FORCE_RESCAN: ${{ github.event.inputs.recipient_override != '' && '1' || '' }}
           PYTHONUNBUFFERED: '1'
         run: python scripts/send_report.py --mode=monday
 
@@ -109,6 +119,9 @@ jobs:
       # → 금요일에는 앞선 standard(08:42) 의 push 를 pull --rebase 로 먼저 반영.
       # ============================================================
       - name: history 커밋
+        # recipient_override 지정 실행은 검증용 test 발송이므로 history 를 origin/main 에
+        # 커밋하지 않음. runner 임시 파일 시스템에만 남고 종료 시 사라짐.
+        if: github.event.inputs.recipient_override == ''
         run: |
           git config user.name "teoldeurim-bot"
           git config user.email "actions@github.com"
