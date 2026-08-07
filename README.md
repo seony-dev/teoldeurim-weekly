@@ -3,10 +3,11 @@
 K-pop Shorts 채널 **'털어드림'**의 콘텐츠 소싱을 자동화하는 봇 모음.
 
 - **주간 메일러 (`weekly.py` + `benchmark.py` 통합)** — 두 종류의 리포트를 자동 발송:
-  - **격주 금요일 08:42 KST · Standard** — 30일 초과 ~ 365일 이내 K-pop Shorts 후보
+  - **격주 금요일 08:47 KST · Standard** — 30일 초과 ~ 365일 이내 K-pop Shorts 후보
     (ISO 홀수 주차만 실행)
-  - **월·수·금 (월 08:42 / 수 08:42 / 금 09:30 KST) · Recent** — 최근 0~7일 이내
-    신선한 콘텐츠
+  - **월·수·금 (전부 08:42 KST) · Recent** — 최근 0~7일 이내 신선한 콘텐츠. 금요일은
+    Standard(08:47) 보다 5분 먼저 실행되어 recent 를 먼저 받아볼 수 있음
+    (concurrency group `teoldeurim-mailer` 공유 → Recent 완료 후 Standard 자동 큐 실행)
 - **오케스트레이터 (`send_report.py`)** — Weekly(YouTube 검색어 기반) + Benchmark(외부 참고
   채널) 을 각각 subprocess 로 실행 → 상위 2탭 shell HTML 로 통합 → Gmail 발송 → 결과
   `history/` 및 `benchmark/history/sent/` 에 영구 아카이브.
@@ -23,7 +24,7 @@ K-pop Shorts 채널 **'털어드림'**의 콘텐츠 소싱을 자동화하는 �
 ## 주요 기능
 
 ### 격주 금요일 Standard 리포트
-- **cron**: `42 23 * * 4` (목 23:42 UTC = **금 08:42 KST**) — ISO 홀수 주차만 실행 (`weekly.yml`)
+- **cron**: `47 23 * * 4` (목 23:47 UTC = **금 08:47 KST**) — ISO 홀수 주차만 실행 (`weekly.yml`)
 - **조건**: 조회수 **50만 ~ 900만**, 업로드 **30일 초과 ~ 365일 이내**, 길이 **15 ~ 180초**
 - **workflow_dispatch inputs** (수동 실행 시): `force_rescan` / `report_date` (slot 날짜 override)
   / `notice` (본문 최상단 안내 박스) / `reissue` ([재발송] subject prefix)
@@ -34,8 +35,8 @@ K-pop Shorts 채널 **'털어드림'**의 콘텐츠 소싱을 자동화하는 �
 - **cron 3개** (`monday_recent.yml`):
   - `42 23 * * 0` (일 23:42 UTC = **월 08:42 KST**)
   - `42 23 * * 2` (화 23:42 UTC = **수 08:42 KST**)
-  - `30 0 * * 5` (금 00:30 UTC = **금 09:30 KST**) — 같은 금요일 Standard(08:42) 완료 후
-    concurrency group `teoldeurim-mailer` 로 자동 순차 실행
+  - `42 23 * * 4` (목 23:42 UTC = **금 08:42 KST**) — 같은 날 Standard(08:47) 보다 5분 먼저 실행.
+    concurrency group `teoldeurim-mailer` 로 Recent 완료 후 Standard 자동 큐 실행
 - **조건**: 조회수 **5만 ~ 300만**, 업로드 **0 ~ 7일 이내**, 길이 **15 ~ 180초**
 - **파이프라인**: `send_report.py --mode=monday` (backward compat 상 이름 유지, 실제로는 월·수·금 공용)
 
@@ -164,12 +165,13 @@ python scripts/benchmark.py
 
 별도 서버 배포 없음 — **GitHub Actions cron**으로 운영됩니다.
 
-- **Standard**: `.github/workflows/weekly.yml`의 `cron: '42 23 * * 4'` (목 23:42 UTC = 금 08:42 KST).
+- **Standard**: `.github/workflows/weekly.yml`의 `cron: '47 23 * * 4'` (목 23:47 UTC = 금 08:47 KST).
   ISO 홀수 주차만 실행 (`workflow_dispatch` 수동 실행은 격주 gate 우회).
-- **Recent (월·수·금)**: `.github/workflows/monday_recent.yml` 의 cron 3개 (일 23:42, 화 23:42,
-  금 00:30 UTC).
-- 두 workflow 는 `concurrency: group: teoldeurim-mailer` 를 공유 → 금요일에 겹치면 순차
-  실행 (Standard 08:42 완료 push 후 Recent 09:30 실행). push race 원천 차단.
+- **Recent (월·수·금)**: `.github/workflows/monday_recent.yml` 의 cron 3개 (일·화·목 23:42 UTC =
+  월·수·금 08:42 KST).
+- 두 workflow 는 `concurrency: group: teoldeurim-mailer` 를 공유 → 금요일 순서: **Recent(08:42)
+  먼저 실행 → 완료 후 Standard(08:47) 실행** (5분 차 트리거지만 concurrency 대기 로 순차 보장).
+  push race 원천 차단.
 - 코드를 `main` 에 push 하면 **다음 실행부터 즉시 반영**됩니다 (검증 없이 push 금지).
 - 실행 후 GitHub Actions 가 `history/` 및 `benchmark/history/sent/` 를 자동 커밋·push 합니다
   (`git pull --rebase --autostash` 로 다른 workflow 의 push 를 먼저 반영).

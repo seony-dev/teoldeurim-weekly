@@ -1,14 +1,16 @@
 name: 털어드림 최근 콘텐츠 리포트 (월·수·금)
 
 # 2026-07-21 대표님 요청: 기존 매주 월요일 단독 → 월·수·금 주 3회 발송 확장.
-# recent 프로파일 (조회수 5만~100만, 업로드 0~7일 이내, NEWEST 정렬) 로
-# 4채널(+ Weekly 검색어 기반) 최근 콘텐츠 발굴.
+# recent 프로파일 (조회수 5만~300만, 업로드 0~7일 이내, NEWEST 정렬) 로
+# 참고 채널 기반 최근 콘텐츠 발굴.
 #
 # 실행 시각 (KST):
-#   · 월요일 08:42  (기존 유지)
-#   · 수요일 08:42  (신규)
-#   · 금요일 09:30  (신규) — 격주 금 standard 는 08:42 KST 이므로 48분 간격으로
-#                          history commit push race 회피
+#   · 월요일 08:42
+#   · 수요일 08:42
+#   · 금요일 08:42  (2026-08-06 09:30 → 08:42 로 앞당김.
+#                    같은 날 Standard 08:47 보다 5분 먼저 실행되며,
+#                    concurrency group teoldeurim-mailer 로 순차 보장 —
+#                    Standard 는 Recent 완료 후 큐에서 자동 시작)
 #
 # 파일명은 이 workflow 의 기존 이름(`monday_recent.yml`) 을 유지하되, 표시명·주석·
 # step 명·history commit 메시지는 모두 "최근 콘텐츠 (recent)" 기준으로 명시.
@@ -17,11 +19,11 @@ on:
   schedule:
     - cron: '42 23 * * 0'   # 일요일 23:42 UTC = 월요일 08:42 KST
     - cron: '42 23 * * 2'   # 화요일 23:42 UTC = 수요일 08:42 KST
-    - cron: '30 0 * * 5'    # 금요일 00:30 UTC = 금요일 09:30 KST
+    - cron: '42 23 * * 4'   # 목요일 23:42 UTC = 금요일 08:42 KST
   workflow_dispatch:
 
 # weekly.yml (격주 금 standard) 와 같은 concurrency group 공유 —
-# 금요일에 standard(08:42) 가 실행 중이면 recent(09:30) 가 queue 에서 대기.
+# 금요일 순서: Recent(08:42) 먼저 실행 → 완료 후 Standard(08:47) 실행.
 # → git push race 원천 차단 + 안전한 순차 실행 보장.
 # (아래 pull --rebase --autostash 도 함께 유지해 이중 방어.)
 concurrency:
