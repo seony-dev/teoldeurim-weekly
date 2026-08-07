@@ -1915,6 +1915,19 @@ def main():
     if kept:
         kept.sort(key=lambda v: v["views"], reverse=True)
 
+    # EXCLUDE_TOP_N_VIEWS: 검증용 상위 N개 명시적 제외 (2026-08-07 도입).
+    # 정규 실행에서는 미설정 → no-op. workflow_dispatch 로 test 발송할 때만 사용.
+    # 상위권을 명시적으로 잘라내 하위권 후보 풀에서 어떤 결과가 나오는지 확인.
+    try:
+        exclude_top_n = int(os.environ.get("EXCLUDE_TOP_N_VIEWS", "0") or "0")
+    except ValueError:
+        exclude_top_n = 0
+    if exclude_top_n > 0 and kept:
+        dropped_top = kept[:exclude_top_n]
+        kept = kept[exclude_top_n:]
+        print(f"[EXCLUDE_TOP_N_VIEWS={exclude_top_n}] 상위 {len(dropped_top)}개 명시적 제외 "
+              f"→ 하위 {len(kept)}개 대상으로 진행 (검증용)")
+
     # ── STEP 3. 지표 계산 (전체 풀 일괄 — dict 공유라 kept/excluded에 모두 반영) ──
     print("\n[STEP 3] 벤치마크 지표 계산")
     for v in all_collected_pool:

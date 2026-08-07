@@ -27,6 +27,11 @@ on:
         type: string
         required: false
         default: ''
+      exclude_top_n_views:
+        description: '(선택) benchmark 에서 조회수 상위 N개 명시적 제외 (검증용, 예: 30). 비면 미적용.'
+        type: string
+        required: false
+        default: ''
 
 # weekly.yml (격주 금 standard) 와 같은 concurrency group 공유 —
 # 금요일 순서: Recent(08:42) 먼저 실행 → 완료 후 Standard(08:47) 실행.
@@ -108,6 +113,8 @@ jobs:
           # recipient_override 지정 시 자동으로 FORCE_RESCAN=1 — 이미 오늘자 history 가 있어도
           # 새 코드로 수집·분석을 다시 돌려야 override 실행의 의미가 있음.
           FORCE_RESCAN: ${{ github.event.inputs.recipient_override != '' && '1' || '' }}
+          # 검증용: benchmark 에서 조회수 상위 N개 명시적 제외 (하위권 후보 확인 목적)
+          EXCLUDE_TOP_N_VIEWS: ${{ github.event.inputs.exclude_top_n_views || '' }}
           PYTHONUNBUFFERED: '1'
         run: python scripts/send_report.py --mode=monday
 
