@@ -30,6 +30,8 @@ BENCHMARK_CONFIG = {
         {"name": "베몽몬", "channel": "https://www.youtube.com/@baemongmon"},
         {"name": "팝픽", "channel": "https://www.youtube.com/@PopPickkk"},
         {"name": "로로단", "channel": "https://www.youtube.com/@로로단"},
+        # 2026-08-06 대표님 요청 추가
+        {"name": "방탄소년(진)", "channel": "https://www.youtube.com/@방탄소년진"},
     ],
 
     # ========================================================================
