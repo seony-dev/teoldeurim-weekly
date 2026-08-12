@@ -1585,6 +1585,19 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used):
                     if max_views else
                     f'<li><b>조회수</b> {min_views:,} 이상</li>')
 
+    # 제외 채널 목록 렌더 — 이름만 표시 (ID 는 UI 노이즈라 생략).
+    # 각 이름은 html_escape 처리해 특수문자/이모지 안전 노출.
+    import html as _html
+    _excl_ch_list = config_used.get("EXCLUDE_CHANNELS") or []
+    if _excl_ch_list:
+        _excl_ch_labels = ", ".join(_html.escape(n) for n in _excl_ch_list)
+        exclude_channels_li = (
+            f'<li><b>채널</b> 제외 채널 자동 차단 '
+            f'(<span style="opacity:.85">{_excl_ch_labels}</span>)</li>'
+        )
+    else:
+        exclude_channels_li = '<li><b>채널</b> 제외 채널 자동 차단 (우리 채널 + blocklist)</li>'
+
     return f"""<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -1609,7 +1622,7 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used):
         <li><b>길이</b> {(str(min_dur)+"초 이상 ~ ") if min_dur else ""}{max_dur}초 이하 (Shorts 형식)</li>
         <li><b>업로드</b> {age_range_label}</li>
         <li><b>중복</b> weekly 기발송 영상 자동 dedup (history 기반)</li>
-        <li><b>채널</b> 제외 채널 자동 차단 (우리 채널 + blocklist)</li>
+        {exclude_channels_li}
       </ul>
     </div>
   </details>
@@ -1949,6 +1962,8 @@ def main():
         "UPLOADED_WITHIN_DAYS": CFG.get("UPLOADED_WITHIN_DAYS", 0),
         "MAX_ANALYSIS_CANDIDATES": CFG.get("MAX_ANALYSIS_CANDIDATES", 0),
         "FINAL_CANDIDATES": CFG.get("FINAL_CANDIDATES", 0),
+        # 제외 채널 이름 목록 (리포트 필터 요약에 명시 표시용). ID 는 노출 안 함.
+        "EXCLUDE_CHANNELS": sorted(CFG.get("EXCLUDE_CHANNELS", set())),
     }
 
     # 파일명에 profile 포함 — 같은 날 recent/standard 동시 실행 시 충돌 방지
