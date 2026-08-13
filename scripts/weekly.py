@@ -71,6 +71,7 @@ CONFIG = {
         "털어드림",
         "밈박스",
         "짤덕방",
+        "Sha Trio",   # 2026-08-13 대표님 요청 (@Shatrio77)
     },
     # 채널 ID 기반 블록리스트 (이름 변경에 영향 안 받음 — 더 안전)
     "CHANNEL_ID_BLOCKLIST": {
@@ -79,6 +80,7 @@ CONFIG = {
         "UCfrO3ZMC-rOThB-NSxfGjTQ",  # 털어드림
         "UCJ-WDvNyJYnt-9lIIX7uKGA",  # 밈박스
         "UCcerVbAluh-1ifuEH6ZMqsw",  # 짤덕방
+        "UC0z9zaHN6pwUoyGVyO8P4AQ",  # Sha Trio (@Shatrio77) — 2026-08-13
     },
     "TITLE_KEYWORD_BLOCKLIST": [
         "직캠", "풀캠", "fancam",
