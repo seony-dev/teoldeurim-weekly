@@ -1,0 +1,799 @@
+{
+  "date_kst": "2026-08-14",
+  "profile": "recent",
+  "generated_at_utc": "2026-08-14T00:49:52.340717+00:00",
+  "config": {
+    "min_views": 50000,
+    "max_views": 3000000,
+    "max_duration_seconds": 180,
+    "lookback_days_used": "0~8일 전 (fallback)",
+    "min_age_days_exclusive": null,
+    "uploaded_within_days": 7
+  },
+  "stats": {
+    "lookback_days": "0~8일 전 (fallback)",
+    "total_collected": 42,
+    "dedup_excluded": 4,
+    "total_after_filter": 0,
+    "hard_filter_excluded": 38,
+    "soft_filter_excluded": 0,
+    "final_count": 0
+  },
+  "candidates": [],
+  "soft_excluded": [],
+  "waitlist": [],
+  "report_lists": {
+    "dedup_excluded": [
+      {
+        "video_id": "BjN9RnljQaE",
+        "url": "https://www.youtube.com/shorts/BjN9RnljQaE",
+        "title": "세븐틴 슈아가 녹음 중 예상 못 한 일이 벌어짐",
+        "channel": "윤정한 너로 정한다",
+        "channel_id": "UCeeEjvHE2Ah1IUhgdQNFOGg",
+        "published_at": "2026-08-07T12:15:17Z",
+        "view_count": 431499,
+        "duration_seconds": 19,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 녹음 비하인드 shorts"
+        ],
+        "stage": "dedup_excluded",
+        "analysis": {
+          "topic_type": "아이돌 뒷이야기 (세븐틴 슈아)",
+          "title_pattern": "'[그룹] [멤버]가 녹음 중 예상 못 한 일이 벌어짐'",
+          "low_timeliness_reason": "녹음실 비하인드는 시점과 무관하게 재소비되는 구조적 소재",
+          "channel_fit": "명세 '녹음실 비하인드 shorts' 정합. 1군 그룹 멤버 특정 + 예상 밖 상황으로 2차 해석 확장 가능",
+          "first_3sec_hook": "의외성형. 녹음 부스 슈아 장면 + '예상 못 한 일이...' 자막 페이드인",
+          "variation_topic": "세븐틴 녹음실에서 반복되는 슈아의 특유 습관·디렉팅 구조를 팀 프로듀싱 시스템 관점에서 해설",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "중복 제외",
+        "sent_date": "2026-08-12",
+        "exclusion_reason": "과거 발송 이력 중복 (2026-08-12 발송)"
+      },
+      {
+        "video_id": "qgZUOcBO6E8",
+        "url": "https://www.youtube.com/shorts/qgZUOcBO6E8",
+        "title": "시골 똥개 텐션 터진 걸그룹 비주얼",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-08-09T02:00:28Z",
+        "view_count": 172465,
+        "duration_seconds": 19,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts"
+        ],
+        "stage": "dedup_excluded",
+        "analysis": {
+          "topic_type": "아이돌 일상 상황극 (걸그룹 비주얼 멤버, 추정)",
+          "title_pattern": "'[비유적 표현] 텐션 터진 [그룹/포지션]'",
+          "low_timeliness_reason": "멤버의 텐션·성격 갭 소재는 활동기마다 반복 소비되는 장기 콘텐츠",
+          "channel_fit": "명세 '일상 상황극' 정합. 비주얼 이미지 vs 실제 텐션 갭을 2차 해석으로 확장 가능",
+          "first_3sec_hook": "비교형. 정제된 비주얼 무대컷 → 개구지게 뛰노는 예능컷 전환 + '시골 똥개' 자막",
+          "variation_topic": "비주얼 포지션 멤버가 방송에서 반전 텐션을 보여주는 구조 — 그룹 내 이미지 분업과 팬덤 소비 패턴 해설",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "중복 제외",
+        "sent_date": "2026-08-12",
+        "exclusion_reason": "과거 발송 이력 중복 (2026-08-12 발송)"
+      },
+      {
+        "video_id": "oBYVFMKq9MQ",
+        "url": "https://www.youtube.com/shorts/oBYVFMKq9MQ",
+        "title": "겁 너무 많아 기절 직전인 걸그룹 막내",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-08-07T22:00:02Z",
+        "view_count": 102828,
+        "duration_seconds": 36,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "dedup_excluded",
+        "analysis": {
+          "topic_type": "아이돌 일상 상황극 (걸그룹 막내, 추정)",
+          "title_pattern": "'겁 너무 많아 [극한상태]인 [포지션] 막내'",
+          "low_timeliness_reason": "멤버 성격·리액션 캐릭터성은 활동기마다 재소환되는 반복 소비 소재",
+          "channel_fit": "명세 '일상 상황극' 정합. 막내 포지션의 겁많은 캐릭터를 관계성·팬 반응 각도로 2차 해석 가능",
+          "first_3sec_hook": "의외성형. 놀라 얼어붙은 막내 리액션 클로즈업 + '기절 직전' 자막",
+          "variation_topic": "걸그룹 막내 포지션에 반복적으로 부여되는 '겁많은 캐릭터'가 팬덤에서 소비되는 구조 분석",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "중복 제외",
+        "sent_date": "2026-08-10",
+        "exclusion_reason": "과거 발송 이력 중복 (2026-08-10 발송)"
+      },
+      {
+        "video_id": "FzUIATg5Ov0",
+        "url": "https://www.youtube.com/shorts/FzUIATg5Ov0",
+        "title": "하루종일 굶기다 기절시킨 걸그룹",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-08-09T07:00:07Z",
+        "view_count": 73014,
+        "duration_seconds": 24,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts"
+        ],
+        "stage": "dedup_excluded",
+        "analysis": {
+          "topic_type": "아이돌 고충 분석 (걸그룹 다이어트·촬영 강행군)",
+          "title_pattern": "'하루종일 [극단행위] 기절시킨 [대상]'",
+          "low_timeliness_reason": "걸그룹 다이어트·촬영 강행 구조는 세대마다 반복되는 장기 소비 소재",
+          "channel_fit": "명세 '아이돌 고충 분석' 정합. 소속사·촬영장 관행을 산업 구조 각도로 확장 가능",
+          "first_3sec_hook": "극한상황형. '하루종일 굶기다' 자막 + 기절 장면 컷 삽입으로 충격 유도",
+          "variation_topic": "뮤비·화보 촬영 전 굶기기 관행이 반복되는 구조 — 비주얼 디렉팅과 회사 통제의 경제학",
+          "should_include": true,
+          "exclusion_reason": ""
+        },
+        "status_label": "중복 제외",
+        "sent_date": "2026-08-10",
+        "exclusion_reason": "과거 발송 이력 중복 (2026-08-10 발송)"
+      }
+    ],
+    "hard_excluded": [
+      {
+        "video_id": "rCJiDfNpawA",
+        "url": "https://www.youtube.com/shorts/rCJiDfNpawA",
+        "title": "실물 비율 레전드 찍은 걸그룹 허리",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-08-10T12:00:24Z",
+        "view_count": 114135,
+        "duration_seconds": 7,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts",
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "길이 15초 미만 (7초)"
+      },
+      {
+        "video_id": "3F7cKDsttCw",
+        "url": "https://www.youtube.com/shorts/3F7cKDsttCw",
+        "title": "연습실 바닥에 몸 던지는 걸그룹",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-08-08T22:00:34Z",
+        "view_count": 52199,
+        "duration_seconds": 4,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "길이 15초 미만 (4초)"
+      },
+      {
+        "video_id": "yEYekVW8Kmc",
+        "url": "https://www.youtube.com/shorts/yEYekVW8Kmc",
+        "title": "과거 영상 털리고 오열할 걸그룹 리더",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-08-12T02:00:40Z",
+        "view_count": 34385,
+        "duration_seconds": 31,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (34,385회)"
+      },
+      {
+        "video_id": "hBIG_6A9V2U",
+        "url": "https://www.youtube.com/shorts/hBIG_6A9V2U",
+        "title": "진짜 신의 한수였다는 지우 단발 비하인드",
+        "channel": "연예소식뉴스",
+        "channel_id": "UCFBW8UcsBRd-HZHaNMNr7_w",
+        "published_at": "2026-08-08T11:30:18Z",
+        "view_count": 34198,
+        "duration_seconds": 41,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts",
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (34,198회)"
+      },
+      {
+        "video_id": "f6Bz8uAEZlM",
+        "url": "https://www.youtube.com/shorts/f6Bz8uAEZlM",
+        "title": "비하인드 맛떼루요.. #리센느 #rescene #kbsworldtv #마이데이트립 #shorts",
+        "channel": "매일이 메이데이",
+        "channel_id": "UC9JRgKC5f114mrxlJL94XgA",
+        "published_at": "2026-08-07T09:42:25Z",
+        "view_count": 31261,
+        "duration_seconds": 12,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (31,261회)"
+      },
+      {
+        "video_id": "OkrVHjwCSGQ",
+        "url": "https://www.youtube.com/shorts/OkrVHjwCSGQ",
+        "title": "아이돌판 뒤흔든 역주행 신화 #Shorts",
+        "channel": "핫큐",
+        "channel_id": "UCmeibYrEVghuR931WurRpBw",
+        "published_at": "2026-08-06T04:15:11Z",
+        "view_count": 31040,
+        "duration_seconds": 22,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 역주행 서사 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (31,040회)"
+      },
+      {
+        "video_id": "MQMeC50lZIo",
+        "url": "https://www.youtube.com/shorts/MQMeC50lZIo",
+        "title": "데뷔 때 통통했던 이유 알고 숙연해지는 리센느 비하인드 ㄷㄷ",
+        "channel": "썰제작소",
+        "channel_id": "UC_cRXjjJEmkw8ipdqug3XrQ",
+        "published_at": "2026-08-07T13:35:11Z",
+        "view_count": 27253,
+        "duration_seconds": 47,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (27,253회)"
+      },
+      {
+        "video_id": "67nMhPHxaJY",
+        "url": "https://www.youtube.com/shorts/67nMhPHxaJY",
+        "title": "KPOP 최초 인터폴 수배자? #shorts",
+        "channel": "덕꾸다요",
+        "channel_id": "UCfOHDt_VcbcgYDxhEUB4prw",
+        "published_at": "2026-08-10T09:23:10Z",
+        "view_count": 24928,
+        "duration_seconds": 60,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (24,928회)"
+      },
+      {
+        "video_id": "gcIDKSxNflg",
+        "url": "https://www.youtube.com/shorts/gcIDKSxNflg",
+        "title": "데뷔 전날 엽떡 폭식해 사장 오열한 걸그룹",
+        "channel": "아이돌찐",
+        "channel_id": "UC6tkW-3l7ercVe0uFWGW1wA",
+        "published_at": "2026-08-09T12:00:08Z",
+        "view_count": 22851,
+        "duration_seconds": 29,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (22,851회)"
+      },
+      {
+        "video_id": "tsrQGTbpF4c",
+        "url": "https://www.youtube.com/shorts/tsrQGTbpF4c",
+        "title": "비하인드에서 보는 프로미스나인의 공통점 [프로미스나인]",
+        "channel": "나 진짜진지해",
+        "channel_id": "UCg3ebbWMmlVHiOYP1XhhHAQ",
+        "published_at": "2026-08-09T06:37:15Z",
+        "view_count": 22704,
+        "duration_seconds": 23,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts",
+          "아이돌 비하인드 shorts",
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (22,704회)"
+      },
+      {
+        "video_id": "4BFLjSWoAAo",
+        "url": "https://www.youtube.com/shorts/4BFLjSWoAAo",
+        "title": "vitamin ME 촬영 비하인드 컷 #shorts",
+        "channel": "이채영 아카이브",
+        "channel_id": "UCAC63TR29pcai-eKbdWBInw",
+        "published_at": "2026-08-13T03:00:34Z",
+        "view_count": 18857,
+        "duration_seconds": 9,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (18,857회)"
+      },
+      {
+        "video_id": "szCD3u3BXKc",
+        "url": "https://www.youtube.com/shorts/szCD3u3BXKc",
+        "title": "수영이 '소원을 말해봐' 솔로 무대를 한 이유",
+        "channel": "지금은소녀시대",
+        "channel_id": "UCsgQYjFnzudKXSTaLWeqF3w",
+        "published_at": "2026-08-06T22:45:03Z",
+        "view_count": 16215,
+        "duration_seconds": 51,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 무대 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (16,215회)"
+      },
+      {
+        "video_id": "ONAZNoWJhqU",
+        "url": "https://www.youtube.com/shorts/ONAZNoWJhqU",
+        "title": "이 노래가 음방 1위을 못 했다고? #shorts",
+        "channel": "덕꾸다요",
+        "channel_id": "UCfOHDt_VcbcgYDxhEUB4prw",
+        "published_at": "2026-08-12T07:45:29Z",
+        "view_count": 15771,
+        "duration_seconds": 60,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts",
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (15,771회)"
+      },
+      {
+        "video_id": "u_jwSE_l8No",
+        "url": "https://www.youtube.com/shorts/u_jwSE_l8No",
+        "title": "카리나가 팬한테 호통 친 이유 #shorts #아이돌",
+        "channel": "케이팝으로 보는 세상",
+        "channel_id": "UCsTacSJLSgxthmSwnW_Inwg",
+        "published_at": "2026-08-12T10:00:38Z",
+        "view_count": 15111,
+        "duration_seconds": 23,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 팬한테 부탁 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (15,111회)"
+      },
+      {
+        "video_id": "-Au-xoA_5VI",
+        "url": "https://www.youtube.com/shorts/-Au-xoA_5VI",
+        "title": "팀 빨인 줄 모르고 나간 결과 #shorts",
+        "channel": "덕꾸다요",
+        "channel_id": "UCfOHDt_VcbcgYDxhEUB4prw",
+        "published_at": "2026-08-11T08:00:12Z",
+        "view_count": 13854,
+        "duration_seconds": 56,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (13,854회)"
+      },
+      {
+        "video_id": "7L5jQPkdKZw",
+        "url": "https://www.youtube.com/shorts/7L5jQPkdKZw",
+        "title": "'라이브 실력'에 가려진 베몬 'MOON' 멤버별 춤선 #베이비몬스터 #BABYMONSTER #YG #shorts",
+        "channel": "아니띵",
+        "channel_id": "UCEYNv18kWpK1-3LunuHgmUA",
+        "published_at": "2026-08-06T14:29:42Z",
+        "view_count": 12721,
+        "duration_seconds": 38,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 라이브 실력 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (12,721회)"
+      },
+      {
+        "video_id": "50t6FqR7Vmw",
+        "url": "https://www.youtube.com/shorts/50t6FqR7Vmw",
+        "title": "퇴근 걸고 탁구대 오른 아이돌 ㅋㅋㅋ#shorts",
+        "channel": "파이리센느강",
+        "channel_id": "UCVus0R5yMzKkxtXOPSyloDg",
+        "published_at": "2026-08-10T21:00:35Z",
+        "view_count": 12476,
+        "duration_seconds": 44,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (12,476회)"
+      },
+      {
+        "video_id": "d3Kb9fj_3jQ",
+        "url": "https://www.youtube.com/shorts/d3Kb9fj_3jQ",
+        "title": "[코르티스/CORTIS] 이럴 줄 몰랐지 (MOTION 촬영 비하인드) #코르티스 #shorts #제임스 #james #주훈 #juhoon",
+        "channel": "코르르기",
+        "channel_id": "UCjTRGEi3yWx8pdqu1bzMcjw",
+        "published_at": "2026-08-07T13:25:33Z",
+        "view_count": 11339,
+        "duration_seconds": 32,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (11,339회)"
+      },
+      {
+        "video_id": "ls9TWlBL964",
+        "url": "https://www.youtube.com/shorts/ls9TWlBL964",
+        "title": "김유정 걷기만 해도 화보 20251002 [#shorts 비하인드] #김유정 #KimYouJung #공항패션 #BEHIND",
+        "channel": "비하인드 BEHIND PICK",
+        "channel_id": "UCRalWBcI5VltukxQH1FoKmA",
+        "published_at": "2026-08-07T03:46:37Z",
+        "view_count": 9298,
+        "duration_seconds": 13,
+        "default_lang": "ja",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (9,298회)"
+      },
+      {
+        "video_id": "61DQYwhyAjY",
+        "url": "https://www.youtube.com/shorts/61DQYwhyAjY",
+        "title": "아이돌이 화장실 가고 싶을 때 외치는 비밀 암호 🤫 #기안84 #리센느",
+        "channel": "날예능",
+        "channel_id": "UC2dV0l2-JuhWj1QWtKXLjxg",
+        "published_at": "2026-08-07T15:00:26Z",
+        "view_count": 7609,
+        "duration_seconds": 21,
+        "default_lang": "zxx",
+        "matched_queries": [
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (7,609회)"
+      },
+      {
+        "video_id": "GFfutfhcZC0",
+        "url": "https://www.youtube.com/shorts/GFfutfhcZC0",
+        "title": "옐이 말하는 워터밤 비하인드",
+        "channel": "하이키포인트레슨",
+        "channel_id": "UCdq9qMuWGmo7nSMwkbDj8Jw",
+        "published_at": "2026-08-07T23:11:26Z",
+        "view_count": 6281,
+        "duration_seconds": 52,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts",
+          "아이돌 비하인드 shorts",
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (6,281회)"
+      },
+      {
+        "video_id": "517jVF2gNMI",
+        "url": "https://www.youtube.com/shorts/517jVF2gNMI",
+        "title": "골대 앞에서 방해 댄스 추는 아이돌 ㅋㅋㅋ #shorts",
+        "channel": "파이리센느강",
+        "channel_id": "UCVus0R5yMzKkxtXOPSyloDg",
+        "published_at": "2026-08-11T03:00:26Z",
+        "view_count": 5262,
+        "duration_seconds": 45,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (5,262회)"
+      },
+      {
+        "video_id": "EPvvI1xTHe0",
+        "url": "https://www.youtube.com/shorts/EPvvI1xTHe0",
+        "title": "가사에 충실한 편 #shorts",
+        "channel": "탬벅탬벅",
+        "channel_id": "UCfa4OkbAgKWz8ZMLYisck6A",
+        "published_at": "2026-08-13T11:46:11Z",
+        "view_count": 4244,
+        "duration_seconds": 32,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (4,244회)"
+      },
+      {
+        "video_id": "W9dEVL0Ei6k",
+        "url": "https://www.youtube.com/shorts/W9dEVL0Ei6k",
+        "title": "데뷔 직전에 20kg이나 쪄버려서 난리 났었다는 걸그룹 충격 고백 😱 #shorts #리센스 #RESCENE #제나 #원이 #미나미 #다이어트",
+        "channel": "셀럽털기",
+        "channel_id": "UC7SajKcENywedOw8E90kv2w",
+        "published_at": "2026-08-13T08:00:10Z",
+        "view_count": 3073,
+        "duration_seconds": 23,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (3,073회)"
+      },
+      {
+        "video_id": "ZqRB_PJXhc4",
+        "url": "https://www.youtube.com/shorts/ZqRB_PJXhc4",
+        "title": "김유정 꾸안꾸 공항패션 20251002 [#shorts 비하인드] #김유정 #KimYouJung #공항패션 #BEHIND",
+        "channel": "비하인드 BEHIND PICK",
+        "channel_id": "UCRalWBcI5VltukxQH1FoKmA",
+        "published_at": "2026-08-07T12:00:05Z",
+        "view_count": 2147,
+        "duration_seconds": 19,
+        "default_lang": "ja",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (2,147회)"
+      },
+      {
+        "video_id": "OuFccB0yOcY",
+        "url": "https://www.youtube.com/shorts/OuFccB0yOcY",
+        "title": "#지디띄 #G_DRAGON #유네스코 #Shorts #지디띄비하인드 무대 뒤에서 이렇게 귀여우면 어떡함.. 지디띄 유네스코 비하인드 🤍✨",
+        "channel": "꧁༺꼬솜༻꧂",
+        "channel_id": "UCgIwwVQfSKCzqzbKB4LXGxw",
+        "published_at": "2026-08-07T06:02:00Z",
+        "view_count": 2098,
+        "duration_seconds": 14,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (2,098회)"
+      },
+      {
+        "video_id": "VuthBzKtMQ0",
+        "url": "https://www.youtube.com/shorts/VuthBzKtMQ0",
+        "title": "Narin is also very funny in the behind! 나린이도 비하인드에서 너무 재미있다! #meovv #shorts #kpop #narin #나린",
+        "channel": "QBonitchua",
+        "channel_id": "UCyshPwIO4NVks8zEHvKdG5Q",
+        "published_at": "2026-08-11T20:30:16Z",
+        "view_count": 1868,
+        "duration_seconds": 23,
+        "default_lang": "zxx",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,868회)"
+      },
+      {
+        "video_id": "JE08QTMZtAk",
+        "url": "https://www.youtube.com/shorts/JE08QTMZtAk",
+        "title": "어머님은 짜장면이 싫다고 하셨어 가사의 진짜 주인공 😭 #shorts #쇼츠",
+        "channel": "알고보면반전",
+        "channel_id": "UCNWUIBYhMME_AeWGe8gCxzQ",
+        "published_at": "2026-08-06T09:47:47Z",
+        "view_count": 1639,
+        "duration_seconds": 59,
+        "default_lang": "en",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,639회)"
+      },
+      {
+        "video_id": "YxzWypb8aG0",
+        "url": "https://www.youtube.com/shorts/YxzWypb8aG0",
+        "title": "삭제 요청했던 곡이 빌보드 1위?! 로제 APT. 비하인드 😱 #알고반 #쇼츠",
+        "channel": "알고보면반전",
+        "channel_id": "UCNWUIBYhMME_AeWGe8gCxzQ",
+        "published_at": "2026-08-13T05:42:14Z",
+        "view_count": 1376,
+        "duration_seconds": 60,
+        "default_lang": "en",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,376회)"
+      },
+      {
+        "video_id": "royD4vCqz9Y",
+        "url": "https://www.youtube.com/shorts/royD4vCqz9Y",
+        "title": "요크셔테리어 베이지 염색하고 러블리 똥강아지 된 이나경",
+        "channel": "새롬워늘짜릿해",
+        "channel_id": "UC59G-HRAIPS3wVkJX4lwecQ",
+        "published_at": "2026-08-07T12:30:09Z",
+        "view_count": 1359,
+        "duration_seconds": 58,
+        "default_lang": "ko",
+        "matched_queries": [
+          "걸그룹 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,359회)"
+      },
+      {
+        "video_id": "zU1C_1TG2b8",
+        "url": "https://www.youtube.com/shorts/zU1C_1TG2b8",
+        "title": "데뷔 8년차 경력직 신인 아이돌 재하 | 최애데뷔 비하인드 3화",
+        "channel": "STUDIO 596",
+        "channel_id": "UCqfHmC-Zzdd-yaamMVUg2Yw",
+        "published_at": "2026-08-06T09:00:08Z",
+        "view_count": 1260,
+        "duration_seconds": 41,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 데뷔 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,260회)"
+      },
+      {
+        "video_id": "xaVAJPbKlME",
+        "url": "https://www.youtube.com/shorts/xaVAJPbKlME",
+        "title": "Ella is also very funny in the behind! 엘라이도 비하인드에서 너무 재미있다! #meovv #shorts #kpop #ella #엘라",
+        "channel": "QBonitchua",
+        "channel_id": "UCyshPwIO4NVks8zEHvKdG5Q",
+        "published_at": "2026-08-12T12:00:01Z",
+        "view_count": 1117,
+        "duration_seconds": 27,
+        "default_lang": "zxx",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (1,117회)"
+      },
+      {
+        "video_id": "KfdYN6ZQRoo",
+        "url": "https://www.youtube.com/shorts/KfdYN6ZQRoo",
+        "title": "눈물을 딛고 무대 위로! 아이돌의 진짜 이야기 🎤✨ #shorts",
+        "channel": "AI 드라마랩",
+        "channel_id": "UCmegCxRxYxHQtmdIYqWKYjg",
+        "published_at": "2026-08-13T03:30:05Z",
+        "view_count": 811,
+        "duration_seconds": 9,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 역주행 서사 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (811회)"
+      },
+      {
+        "video_id": "5Ozt-UMJ5Pk",
+        "url": "https://www.youtube.com/shorts/5Ozt-UMJ5Pk",
+        "title": "2026년 여름 AI 아이돌 제미의 NG모음🥺비하인드  #shorts #ai아이돌 #gemi #aiartist",
+        "channel": "The RAJA Project",
+        "channel_id": "UCdNSG8l0PicRCPlZk6QHPCw",
+        "published_at": "2026-08-13T15:24:49Z",
+        "view_count": 291,
+        "duration_seconds": 29,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (291회)"
+      },
+      {
+        "video_id": "E1_lHwc_-bo",
+        "url": "https://www.youtube.com/shorts/E1_lHwc_-bo",
+        "title": "리센느X선미 챌린지 비하인드 | 안보면 손해!",
+        "channel": "1분컷 시간순삭",
+        "channel_id": "UCkv-ByArqdTeGGKlt5Bxx0w",
+        "published_at": "2026-08-06T15:00:17Z",
+        "view_count": 284,
+        "duration_seconds": 56,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts",
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (284회)"
+      },
+      {
+        "video_id": "uh2jlsKLok8",
+        "url": "https://www.youtube.com/shorts/uh2jlsKLok8",
+        "title": "원희 품에 폭 안긴 기니피그🥹💛 #Shorts",
+        "channel": "아일릿덕",
+        "channel_id": "UCH0in4w8ppqDXhBQ7pML0Ew",
+        "published_at": "2026-08-08T03:00:19Z",
+        "view_count": 230,
+        "duration_seconds": 20,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (230회)"
+      },
+      {
+        "video_id": "LHdbIHqoOdc",
+        "url": "https://www.youtube.com/shorts/LHdbIHqoOdc",
+        "title": "우리가 몰랐던 연습생들의 진짜 이야기 #kpop #비하인드 #shorts",
+        "channel": "하얀늑대",
+        "channel_id": "UCPwk3AYGzFp1PvXLOP0tKvA",
+        "published_at": "2026-08-12T16:30:15Z",
+        "view_count": 173,
+        "duration_seconds": 43,
+        "default_lang": "ko",
+        "matched_queries": [
+          "케이팝 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (173회)"
+      },
+      {
+        "video_id": "2XaRneIZMTM",
+        "url": "https://www.youtube.com/shorts/2XaRneIZMTM",
+        "title": "아이돌 데뷔가 이렇게 된다고?ㅋㅋ 썰이 너무 허무함 😂 #shorts",
+        "channel": "오늘도 리센느 💗",
+        "channel_id": "UCNLRiPbKIrqkwQiyRo4LDvw",
+        "published_at": "2026-08-12T13:41:14Z",
+        "view_count": 18,
+        "duration_seconds": 34,
+        "default_lang": "ko",
+        "matched_queries": [
+          "아이돌 데뷔 비하인드 shorts",
+          "아이돌 비하인드 shorts"
+        ],
+        "stage": "hard_excluded",
+        "status_label": "자동 필터 컷",
+        "exclusion_reason": "조회수 5만 미만 (18회)"
+      }
+    ],
+    "hard_passed": []
+  }
+}
