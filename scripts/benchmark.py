@@ -670,6 +670,39 @@ def hard_filter(videos, now):
     return passed, excluded
 
 
+def apply_sent_dedup_pre_analysis(passed, sent_video_ids):
+    """Recent 프로파일 전용: Claude 분석 대상 선정 전에 기발송 영상 분리.
+
+    2026-08-14 대표님 요청 반영.
+    기존에는 Claude 분석 후 dedup 을 적용해서 상위 N 슬롯을 기발송 영상이 차지하면
+    그만큼 신규 후보가 밀리는 구조였음. Recent 만 사전 dedup 으로 전환해 상위 N 개를
+    신규 영상으로 꽉 채운다. 로직·조건·상한 값은 변경 없음.
+
+    Standard 프로파일은 이 함수를 호출하지 않고 기존 순서 그대로 유지된다
+    (Claude 분석 후 dedup) — Standard 최종 결과 보존.
+
+    Args:
+        passed: Hard 필터 통과 영상 list (호출 전 조회수 내림차순 정렬돼 있어야 함).
+        sent_video_ids: 이미 발송한 video_id 집합 (weekly history + benchmark sent 합집합).
+
+    Returns:
+        (fresh, sent_excluded): 두 개 list.
+          fresh          = 신규 영상 (already_sent=False 표시 부착)
+          sent_excluded  = 기발송 영상 (already_sent=True + exclusion_reason 부착).
+                          Claude 분석 안 함.
+    """
+    fresh, sent_excluded = [], []
+    for v in passed:
+        if v["video_id"] in sent_video_ids:
+            v["already_sent"] = True
+            v["exclusion_reason"] = "weekly 기발송 영상 (history dedup)"
+            sent_excluded.append(v)
+        else:
+            v["already_sent"] = False
+            fresh.append(v)
+    return fresh, sent_excluded
+
+
 def apply_max_views_filter(videos):
     """MAX_VIEWS 초과 영상을 분리한다 (Hard 필터 이전).
 
@@ -1338,7 +1371,8 @@ def _render_candidate(rank, v, mode="direct"):
   </div>"""
 
 
-# 탭 정의: (key, label, title_template, desc)
+# 탭 정의: (key, label, title_template, desc). Standard 기존 문구를 원본으로 유지.
+# Recent 는 아래 _RECENT_TAB_DESC_OVERRIDE 로 render_report 안에서 pdesc 만 교체.
 _BENCHMARK_STAGE_TABS = [
     ("collected",          "수집 전체",
      "수집 전체 ({n}개)",
@@ -1366,6 +1400,34 @@ _BENCHMARK_STAGE_TABS = [
      "직접 후보 적합도와 무관하게 소재·훅·제목 구조·관계성·페르소나·팬덤 반응 측면에서 "
      "재사용 가치가 높은 후보 (benchmark_value_score 상위, 기발송 제외). "
      "직접 후보 TOP과 중복되는 영상은 제외되어 별도 신규 후보만 표시."),
+]
+
+# Recent 전용 탭 설명 override (2026-08-14).
+# Recent 는 STEP 5.5 에서 Claude 분석 전에 기발송 dedup 을 적용하므로
+# analyzed / sent_excluded 의 의미가 Standard 와 다르다. 그에 맞춘 문구.
+# Standard 는 이 override 를 적용하지 않아 기존 사용자-facing 설명 그대로 유지.
+_RECENT_TAB_DESC_OVERRIDE = {
+    "analyzed": (
+        "Hard 통과 영상 중 기발송을 사전 제외한 뒤 신규 상위를 Claude로 적합도 분석한 풀."
+    ),
+    "sent_excluded": (
+        "history에서 발견된 weekly 기발송 이력 — Claude 분석 전에 후보 리스트에서 제외됨."
+    ),
+}
+
+# Recent 전용 탭 표시 순서 (2026-08-14).
+# 실제 처리 순서 반영: STEP 5.5 사전 dedup → STEP 6 Claude 분석 이므로
+# HTML 탭에서도 sent_excluded 를 analyzed 앞에 배치해 시각적 순서 일관성 확보.
+# Standard 는 이 재정렬을 적용하지 않아 기존 순서 그대로 유지 (backward compat).
+# 리스트 원소 집합은 _BENCHMARK_STAGE_TABS 와 동일해야 함 (테스트로 검증).
+_RECENT_TAB_ORDER = [
+    "collected",
+    "max_views_excluded",
+    "hard_excluded",
+    "sent_excluded",     # ← Claude 분석 앞으로 이동 (실제 처리 순서 반영)
+    "analyzed",          # ← 뒤로
+    "direct_final",
+    "benchmark_final",
 ]
 
 
@@ -1449,13 +1511,17 @@ def _render_stage_body(key, items):
     return f'<div class="si-list">{rows}</div>'
 
 
-def render_report(stage_data, patterns, today_label, ref_channels, config_used):
+def render_report(stage_data, patterns, today_label, ref_channels, config_used,
+                  profile="standard"):
     """탭 UI 형태의 벤치마크 리포트 HTML 생성.
 
     stage_data: dict
       "collected", "max_views_excluded", "hard_excluded",
       "analyzed", "sent_excluded", "final" 각각의 영상 리스트
-    config_used: filter 기준 표시용 config 스냅샷
+    config_used: filter 기준 표시용 config 스냅샷 (filtered_raw JSON 에도 그대로 저장됨.
+      Standard 의 JSON 구조 보존을 위해 profile 은 이 dict 가 아닌 별도 인자로 받는다.)
+    profile:  "standard" | "recent". "recent" 일 때 analyzed / sent_excluded 탭 설명이
+      _RECENT_TAB_DESC_OVERRIDE 문구로 교체된다. 기본 "standard" = 원본 문구 유지.
     """
     ref_bits = []
     for r in ref_channels:
@@ -1481,9 +1547,24 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used):
 
     default_stage = "direct_final"  # 기본 탭 = 직접 후보 (기존 "final" 대체)
 
+    # Recent 프로파일 여부 — 특정 탭 설명·순서만 profile 별로 다르게 렌더 (Standard 는 원본 유지).
+    # profile 은 함수 인자로 받는다 (config_used = filtered_raw JSON 에 저장되는 스냅샷이라
+    # Standard JSON 구조 보존을 위해 여기에 profile 을 넣지 않는다).
+    _profile_for_desc = profile
+    # 탭 순서 — Recent 는 실제 처리 순서 반영 (sent_excluded → analyzed),
+    # Standard 는 module-level 원본 순서 그대로 유지.
+    if _profile_for_desc == "recent":
+        _tab_by_key = {t[0]: t for t in _BENCHMARK_STAGE_TABS}
+        _tabs_to_render = [_tab_by_key[k] for k in _RECENT_TAB_ORDER]
+    else:
+        _tabs_to_render = _BENCHMARK_STAGE_TABS
     stat_buttons = []
     panels = []
-    for key, label, ptitle_tmpl, pdesc in _BENCHMARK_STAGE_TABS:
+    for key, label, ptitle_tmpl, pdesc in _tabs_to_render:
+        # Recent 만: analyzed / sent_excluded 설명을 사전 dedup 문구로 교체.
+        # Standard 는 override 를 적용하지 않아 backward compat 완전 보존.
+        if _profile_for_desc == "recent" and key in _RECENT_TAB_DESC_OVERRIDE:
+            pdesc = _RECENT_TAB_DESC_OVERRIDE[key]
         items = stage_data.get(key, []) or []
         n = len(items)
         primary = " primary" if key == "direct_final" else ""
@@ -2014,11 +2095,28 @@ def main():
 
     # Claude 분석 대상: 조회수 상위 N개
     passed.sort(key=lambda v: v["views"], reverse=True)
-    to_analyze = passed[:CFG["MAX_ANALYSIS_CANDIDATES"]]
+
+    # ── STEP 5.5. Recent 프로파일: Claude 분석 전 기발송 dedup (2026-08-14 대표님 요청) ──
+    # Recent 만 순서 변경: 상위 N 슬롯을 신규 영상으로 꽉 채워 다양성 확보.
+    # Standard 는 기존 순서 유지 (Claude 분석 후 dedup) — Standard 최종 결과 보존.
+    # profile 분기는 명시적 값 비교로만 처리 (공통화·리팩토링 회피, backward compat 우선).
+    _profile_slug = CFG.get("_PROFILE", "standard")
+    _exclude_sent = CFG.get("EXCLUDE_SENT_FROM_CANDIDATES", True)
+    _recent_pre_dedup = (_profile_slug == "recent" and _exclude_sent)
+    sent_excluded_list = []  # 두 profile 모두에서 사용, 채우는 시점만 다름
+    if _recent_pre_dedup:
+        print(f"\n[STEP 5.5] Recent 기발송 dedup (Claude 분석 전 제외)")
+        _fresh_passed, sent_excluded_list = apply_sent_dedup_pre_analysis(
+            passed, sent_video_ids)
+        to_analyze = _fresh_passed[:CFG["MAX_ANALYSIS_CANDIDATES"]]
+        print(f"  Hard 통과 {len(passed)}개 중 기발송 {len(sent_excluded_list)}개 사전 제외 "
+              f"→ 신규 상위 {len(to_analyze)}개 Claude 분석 대상")
+    else:
+        # Standard: 기존 동작 (sent 여부 무관 상위 N)
+        to_analyze = passed[:CFG["MAX_ANALYSIS_CANDIDATES"]]
 
     # ── STEP 6. Claude 분석 (영상별 적합도 + 벤치마크 가치, 두 축 독립 평가) ──
     total_usage = {"input": 0, "cache_write": 0, "cache_read": 0, "out": 0}
-    sent_excluded_list = []
     direct_final = []
     benchmark_final = []
     final_candidates = []  # backward compat = direct_final
@@ -2039,22 +2137,24 @@ def main():
                   f"→ fit {analysis.get('fit_score', 0)} / "
                   f"bv {analysis.get('benchmark_value_score', 0)}")
 
-        # 기발송 영상 표시 (weekly가 이미 발송한 영상)
-        exclude_sent = CFG.get("EXCLUDE_SENT_FROM_CANDIDATES", True)
-        for v in to_analyze:
-            v["already_sent"] = bool(exclude_sent and v["video_id"] in sent_video_ids)
-
-        # 시각적 일관성을 위해 analyzed 탭은 fit_score 내림차순 정렬 (기존 동작 유지)
-        to_analyze.sort(key=lambda v: v.get("analysis", {}).get("fit_score", 0),
-                        reverse=True)
-
-        # 기발송 분리
-        fresh = [v for v in to_analyze if not v.get("already_sent")]
-        sent_excluded_list = [v for v in to_analyze if v.get("already_sent")]
-        for v in sent_excluded_list:
-            v["exclusion_reason"] = "weekly 기발송 영상 (history dedup)"
-        if sent_excluded_list:
-            print(f"  기발송 영상 {len(sent_excluded_list)}개를 후보 리스트에서 제외")
+        if _recent_pre_dedup:
+            # Recent: dedup 이미 STEP 5.5 에서 완료. to_analyze 는 fresh 만.
+            # analyzed 탭 시각적 일관성만 위해 fit_score 내림차순 정렬.
+            to_analyze.sort(key=lambda v: v.get("analysis", {}).get("fit_score", 0),
+                            reverse=True)
+            fresh = to_analyze
+        else:
+            # Standard: 기존 로직 완전 유지 — Claude 분석 후 dedup.
+            for v in to_analyze:
+                v["already_sent"] = bool(_exclude_sent and v["video_id"] in sent_video_ids)
+            to_analyze.sort(key=lambda v: v.get("analysis", {}).get("fit_score", 0),
+                            reverse=True)
+            fresh = [v for v in to_analyze if not v.get("already_sent")]
+            sent_excluded_list = [v for v in to_analyze if v.get("already_sent")]
+            for v in sent_excluded_list:
+                v["exclusion_reason"] = "weekly 기발송 영상 (history dedup)"
+            if sent_excluded_list:
+                print(f"  기발송 영상 {len(sent_excluded_list)}개를 후보 리스트에서 제외")
 
         # ── 두 리스트 계산 (26.07.14 대표님 피드백 반영: 중복 제거 정책) ──
         # 1) direct_final: fit_score 내림차순 TOP N (기존 방식)
@@ -2134,7 +2234,8 @@ def main():
     print(f"  💾 filtered_raw 최종 저장: {raw_path}")
 
     html = render_report(stage_data, patterns, today_label, ref_channels,
-                         config_snapshot)
+                         config_snapshot,
+                         profile=CFG.get("_PROFILE", "standard"))
     # 파일명에 profile 포함 — 같은 날 recent/standard 동시 실행 시 충돌 방지
     report_path = BENCHMARK_DIR / f"{today_label}_{_profile_slug}_report.html"
     report_path.write_text(html, encoding="utf-8")

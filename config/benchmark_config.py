@@ -52,7 +52,16 @@ BENCHMARK_CONFIG = {
     "HISTORY_HARDPASS_WEIGHT": 1,       # Hard 통과(hard_passed) 등장 시 영상당 가중치
 
     # 이미 weekly에서 발송한 영상(history candidates)은 후보 리스트에서 제외.
-    # (기획 포인트 분석에는 남겨둠 — "이게 먹혔다"는 참고 데이터로 유효)
+    #
+    # 실제 활용 위치 (2026-08-14 코드 기준):
+    #   · direct_final / benchmark_final 후보 리스트에서 제외
+    #   · sent_excluded 탭 표시
+    # 활용 안 되는 위치:
+    #   · 패턴 분석 (analyze_patterns) 입력은 direct_final + benchmark_final 합집합만.
+    #     기발송 영상은 패턴 분석에 들어가지 않음.
+    # profile 별 dedup 적용 시점:
+    #   · Recent: STEP 5.5 (Claude 분석 전) — 분석 슬롯이 신규 영상으로 꽉 채워짐.
+    #   · Standard: STEP 6 (Claude 분석 후) — 기존 동작 유지, 최종 결과 보존.
     "EXCLUDE_SENT_FROM_CANDIDATES": True,
 
     # ========================================================================
