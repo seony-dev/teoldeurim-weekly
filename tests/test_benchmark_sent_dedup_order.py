@@ -8,9 +8,7 @@ Standard 는 기존 동작 (분석 후 dedup) 완전 유지.
   · MAX_ANALYSIS_CANDIDATES 값 (2026-08-21 22채널 확장 대응):
       - Recent   30 (기존 15 → 상향)
       - Standard 30 (기존 10 → 상향, 같은 이유)
-  · FINAL_CANDIDATES 값 (2026-08-21 두 축 slot 확대):
-      - Recent   8  (기존 5 → 상향)
-      - Standard 8  (기존 5 → 상향)
+  · FINAL_CANDIDATES 값: Recent 5 / Standard 5 (2026-08-21 재확정 — 최대 5씩 유지)
   · Claude 호출 수:
       - 기존:         min(Hard 통과, MAX_ANALYSIS_CANDIDATES)
       - Recent 변경 후: min(Hard 통과 fresh, MAX_ANALYSIS_CANDIDATES)
@@ -233,10 +231,10 @@ chk("CFG-01: Standard MAX_ANALYSIS_CANDIDATES=30 (2026-08-21 상향)",
     std["MAX_ANALYSIS_CANDIDATES"] == 30)
 chk("CFG-02: Recent MAX_ANALYSIS_CANDIDATES=30 (2026-08-21 상향)",
     rec["MAX_ANALYSIS_CANDIDATES"] == 30)
-chk("CFG-03: Standard FINAL_CANDIDATES=8 (2026-08-21 상향)",
-    std["FINAL_CANDIDATES"] == 8)
-chk("CFG-04: Recent FINAL_CANDIDATES=8 (2026-08-21 상향)",
-    rec["FINAL_CANDIDATES"] == 8)
+chk("CFG-03: Standard FINAL_CANDIDATES=5 유지",
+    std["FINAL_CANDIDATES"] == 5)
+chk("CFG-04: Recent FINAL_CANDIDATES=5 유지",
+    rec["FINAL_CANDIDATES"] == 5)
 chk("CFG-05: EXCLUDE_SENT_FROM_CANDIDATES 기본 True",
     benchmark_config.BENCHMARK_CONFIG["EXCLUDE_SENT_FROM_CANDIDATES"] is True)
 

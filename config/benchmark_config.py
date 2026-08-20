@@ -32,10 +32,10 @@ BENCHMARK_CONFIG = {
         {"name": "로로단", "channel": "https://www.youtube.com/@로로단"},
         # 2026-08-06 대표님 요청 추가
         {"name": "방탄소년(진)", "channel": "https://www.youtube.com/@방탄소년진"},
-        # 2026-08-20 대표님 요청 추가
+        # 2026-08-19 대표님 요청 추가
         {"name": "빈빵", "channel": "https://www.youtube.com/@bin_ppang"},
         {"name": "최강정", "channel": "https://www.youtube.com/channel/UC1S7dqM64csgijABH0jtq2A"},
-        # 2026-08-21 대표님 요청 추가 — 팬덤별 (투바투/세븐틴/보넥도) 참고 채널
+        # 2026-08-20 대표님 요청 추가 — 팬덤별 (투바투/세븐틴/보넥도) 참고 채널
         {"name": "우뽀삐", "channel": "https://www.youtube.com/@우뽀삐"},
         {"name": "수빈이의 숲", "channel": "https://www.youtube.com/@수빈이의숲"},
         {"name": "샌드위치", "channel": "https://www.youtube.com/@beomgyuprolover"},
@@ -117,6 +117,7 @@ BENCHMARK_CONFIG = {
     # (2026-08-07: MAX_TOTAL_RAW 상한 완전 제거. 초창기 2채널×15=30 기준의 안전값이었으나
     #  8채널로 확장하며 후보 다양성을 과도하게 제한하고 있었음. Claude 분석 비용 상한은
     #  MAX_ANALYSIS_CANDIDATES 로 별도 통제되므로 API 비용 영향 없음.)
+    # 2026-08-21: 대표님 요청으로 참고 채널 10 → 22개 확장. MAX_SHORTS_PER_CHANNEL=50 유지.
 
     # ========================================================================
     # Hard 필터 — 수집 후 로컬에서 적용 (Claude 분석 전 1차 컷)
@@ -167,11 +168,11 @@ BENCHMARK_PROFILES = {
         "UPLOADED_WITHIN_DAYS": 365,      # 365일 초과 컷
         # 2026-08-21 대표님 요청: 참고 채널 10 → 22개 확장으로 Standard 도 pool 커짐
         # (365일 window 넓어 원래도 많음, 22채널이면 더 확대). 상위 10만 검토는 좁아
-        # Claude 검토 pool 을 30 으로 확장. FINAL 도 5 → 8 로 확장해 두 축 균형 유지.
+        # Claude 검토 pool 을 30 으로 확장. FINAL 은 기존 5 유지 (2026-08-21 재확정).
         # 처리 순서는 기존 유지: Hard → 상위 30 Claude 분석 → 기발송 제외 → 직접/벤치마크.
         # Recent 처럼 사전 dedup 로 순서 변경하지 않음.
         "MAX_ANALYSIS_CANDIDATES": 30,
-        "FINAL_CANDIDATES": 8,
+        "FINAL_CANDIDATES": 5,
     },
     # 월·수·금 최근 콘텐츠 통합 리포트용 (0일 ~ 7일).
     #   2026-07-21 대표님 요청: 주 3회 발송 확장 + MIN_VIEWS 10만 → 5만
@@ -191,12 +192,12 @@ BENCHMARK_PROFILES = {
         # (채널당 쿼터·라운드 로빈·점수 보정 없이 조회수 순 정렬 그대로 유지)
         # 2026-08-21 대표님 요청: 참고 채널이 10 → 22개로 확장되어 수집 pool 도 커짐
         # (22채널 × 50 = 최대 1,100). Claude 검토 pool 을 15 → 30 으로 확장.
-        # 이어서 FINAL_CANDIDATES 도 5 → 8 로 확장해 두 축(direct/benchmark) 후보 슬롯을
-        # 각 8개로 넓힘 — 신규 pool 대비 리포트 노출률 33% → 53% 로 개선.
+        # FINAL_CANDIDATES 는 기존 5 유지 (2026-08-21 재확정 — 대표님이 이미
+        # "직접 후보/벤치마크 후보는 최대 5개씩 그대로 유지" 라고 안내하신 상태).
         # 채널별 cap 은 미적용 (현재 순수 조회수 상위 30개 선정, 특정 채널이 상위
         # 슬롯을 다수 차지할 수 있음). 향후 필요 시 재검토.
         "MAX_ANALYSIS_CANDIDATES": 30,
-        "FINAL_CANDIDATES": 8,
+        "FINAL_CANDIDATES": 5,
     },
 }
 
