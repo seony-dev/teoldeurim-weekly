@@ -35,6 +35,19 @@ BENCHMARK_CONFIG = {
         # 2026-08-20 대표님 요청 추가
         {"name": "빈빵", "channel": "https://www.youtube.com/@bin_ppang"},
         {"name": "최강정", "channel": "https://www.youtube.com/channel/UC1S7dqM64csgijABH0jtq2A"},
+        # 2026-08-21 대표님 요청 추가 — 팬덤별 (투바투/세븐틴/보넥도) 참고 채널
+        {"name": "우뽀삐", "channel": "https://www.youtube.com/@우뽀삐"},
+        {"name": "수빈이의 숲", "channel": "https://www.youtube.com/@수빈이의숲"},
+        {"name": "샌드위치", "channel": "https://www.youtube.com/@beomgyuprolover"},
+        {"name": "다섯별처럼", "channel": "https://www.youtube.com/@다섯별처럼"},
+        {"name": "윤너정", "channel": "https://www.youtube.com/@윤너정"},
+        {"name": "밍귤", "channel": "https://www.youtube.com/@mikang97"},
+        {"name": "도도혜혜", "channel": "https://www.youtube.com/@도도혜혜"},
+        {"name": "짱캐럿", "channel": "https://www.youtube.com/@jjangCARAT"},
+        {"name": "운순둥", "channel": "https://www.youtube.com/@운순둥"},
+        {"name": "넥자업고튀어", "channel": "https://www.youtube.com/@넥자업고튀어"},
+        {"name": "한문빌라주인", "channel": "https://www.youtube.com/@한문빌라주인"},
+        {"name": "또보넥", "channel": "https://www.youtube.com/@또보넥"},
     ],
 
     # ========================================================================
@@ -152,8 +165,13 @@ BENCHMARK_PROFILES = {
         "MIN_DURATION_SEC": 15,
         "MIN_AGE_DAYS_EXCLUSIVE": 30,     # 30일 이하는 recent 소속 → 여기서 컷
         "UPLOADED_WITHIN_DAYS": 365,      # 365일 초과 컷
-        "MAX_ANALYSIS_CANDIDATES": 10,
-        "FINAL_CANDIDATES": 5,
+        # 2026-08-21 대표님 요청: 참고 채널 10 → 22개 확장으로 Standard 도 pool 커짐
+        # (365일 window 넓어 원래도 많음, 22채널이면 더 확대). 상위 10만 검토는 좁아
+        # Claude 검토 pool 을 30 으로 확장. FINAL 도 5 → 8 로 확장해 두 축 균형 유지.
+        # 처리 순서는 기존 유지: Hard → 상위 30 Claude 분석 → 기발송 제외 → 직접/벤치마크.
+        # Recent 처럼 사전 dedup 로 순서 변경하지 않음.
+        "MAX_ANALYSIS_CANDIDATES": 30,
+        "FINAL_CANDIDATES": 8,
     },
     # 월·수·금 최근 콘텐츠 통합 리포트용 (0일 ~ 7일).
     #   2026-07-21 대표님 요청: 주 3회 발송 확장 + MIN_VIEWS 10만 → 5만
@@ -171,8 +189,14 @@ BENCHMARK_PROFILES = {
         # 2026-07-14 실측 결과 (30일 기준) 반영: 채널당 조회수 분산이 커
         # top 10 만으로는 특정 채널 편중 → 15로 조정해 채널 다양성 확보.
         # (채널당 쿼터·라운드 로빈·점수 보정 없이 조회수 순 정렬 그대로 유지)
-        "MAX_ANALYSIS_CANDIDATES": 15,
-        "FINAL_CANDIDATES": 5,
+        # 2026-08-21 대표님 요청: 참고 채널이 10 → 22개로 확장되어 수집 pool 도 커짐
+        # (22채널 × 50 = 최대 1,100). Claude 검토 pool 을 15 → 30 으로 확장.
+        # 이어서 FINAL_CANDIDATES 도 5 → 8 로 확장해 두 축(direct/benchmark) 후보 슬롯을
+        # 각 8개로 넓힘 — 신규 pool 대비 리포트 노출률 33% → 53% 로 개선.
+        # 채널별 cap 은 미적용 (현재 순수 조회수 상위 30개 선정, 특정 채널이 상위
+        # 슬롯을 다수 차지할 수 있음). 향후 필요 시 재검토.
+        "MAX_ANALYSIS_CANDIDATES": 30,
+        "FINAL_CANDIDATES": 8,
     },
 }
 

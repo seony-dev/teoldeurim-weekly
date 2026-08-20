@@ -5,7 +5,12 @@ Recent 프로파일만 Claude 분석 전 사전 dedup 으로 전환.
 Standard 는 기존 동작 (분석 후 dedup) 완전 유지.
 
 지키는 원칙:
-  · MAX_ANALYSIS_CANDIDATES 값 자체는 변경 없음 (Recent 15 / Standard 10)
+  · MAX_ANALYSIS_CANDIDATES 값 (2026-08-21 22채널 확장 대응):
+      - Recent   30 (기존 15 → 상향)
+      - Standard 30 (기존 10 → 상향, 같은 이유)
+  · FINAL_CANDIDATES 값 (2026-08-21 두 축 slot 확대):
+      - Recent   8  (기존 5 → 상향)
+      - Standard 8  (기존 5 → 상향)
   · Claude 호출 수:
       - 기존:         min(Hard 통과, MAX_ANALYSIS_CANDIDATES)
       - Recent 변경 후: min(Hard 통과 fresh, MAX_ANALYSIS_CANDIDATES)
@@ -107,17 +112,18 @@ scenario_2 = (
 )
 sent_ids_2 = {"A", "B", "C"}
 
-# Recent: MAX_ANALYSIS_CANDIDATES=15
+# Recent: MAX_ANALYSIS_CANDIDATES=30 (2026-08-21 상향)
+# scenario_2 는 fresh 17개 (3 sent + 17 fresh) 이므로 상한 30 미달 → 전부 to_analyze
 fresh_2, sent_excl_2 = benchmark.apply_sent_dedup_pre_analysis(scenario_2, sent_ids_2)
-max_n_recent = 15
+max_n_recent = 30
 to_analyze_recent = fresh_2[:max_n_recent]
 chk("REQ-01: sent 영상은 to_analyze 에 들어가지 않음",
     all(v["video_id"] not in sent_ids_2 for v in to_analyze_recent))
-chk("REQ-02: fresh 상위 15개로 to_analyze 가 꽉 채워짐",
-    len(to_analyze_recent) == 15)
+chk("REQ-02: fresh 17개 전부 to_analyze (상한 30 미달)",
+    len(to_analyze_recent) == 17)
 chk("REQ-03: sent 는 sent_excluded 에 A/B/C 모두 들어감",
     {v["video_id"] for v in sent_excl_2} == {"A", "B", "C"})
-chk("REQ-04: Claude 분석 대상 수가 상한 15 를 넘지 않음",
+chk("REQ-04: Claude 분석 대상 수가 상한 30 을 넘지 않음",
     len(to_analyze_recent) <= max_n_recent)
 
 
@@ -130,10 +136,10 @@ print(" 3. Claude 호출 수 상한 준수 (min(fresh_count, MAX_ANALYSIS_CANDID
 print("=" * 78)
 
 for case in [
-    ("fresh 20 vs 상한 15", 20, 15, 15),
-    ("fresh 12 vs 상한 15", 12, 15, 12),
-    ("fresh  5 vs 상한 15",  5, 15,  5),
-    ("fresh 30 vs 상한 15", 30, 15, 15),  # 상한 절대 초과 X
+    ("fresh 20 vs 상한 30", 20, 30, 20),  # 상한 미달 → fresh 전부
+    ("fresh 12 vs 상한 30", 12, 30, 12),
+    ("fresh  5 vs 상한 30",  5, 30,  5),
+    ("fresh 40 vs 상한 30", 40, 30, 30),  # 상한 절대 초과 X
 ]:
     label, fresh_n, cap_n, expect = case
     _passed = [mk_video(f"F{i}", 1_000_000 - i) for i in range(fresh_n)]
@@ -172,10 +178,10 @@ sent_ids_std = {"A", "B", "C"}
 
 to_a_std, sent_excl_std_pre = simulate_pre_step_selection(
     profile="standard", exclude_sent=True,
-    passed=passed_std, sent_ids=sent_ids_std, cap=10,
+    passed=passed_std, sent_ids=sent_ids_std, cap=30,
 )
-chk("STD-01: Standard to_analyze 상위 10개 = passed[:10] (sent 포함 여부 무관)",
-    [v["video_id"] for v in to_a_std] == [v["video_id"] for v in passed_std[:10]])
+chk("STD-01: Standard to_analyze 상위 30개 = passed[:30] (sent 포함 여부 무관)",
+    [v["video_id"] for v in to_a_std] == [v["video_id"] for v in passed_std[:30]])
 chk("STD-02: Standard 사전 sent_excluded 리스트 비어있음 (분석 후 처리)",
     sent_excl_std_pre == [])
 chk("STD-03: Standard to_analyze 에 sent A/B/C 여전히 포함",
@@ -185,14 +191,14 @@ chk("STD-03: Standard to_analyze 에 sent A/B/C 여전히 포함",
 # Recent 시나리오: 사전 dedup 후 sent 제외
 to_a_rec, sent_excl_rec_pre = simulate_pre_step_selection(
     profile="recent", exclude_sent=True,
-    passed=passed_std, sent_ids=sent_ids_std, cap=15,
+    passed=passed_std, sent_ids=sent_ids_std, cap=30,
 )
 chk("REC-01: Recent to_analyze 에 sent 없음",
     all(v["video_id"] not in sent_ids_std for v in to_a_rec))
 chk("REC-02: Recent sent_excluded 사전 리스트 A/B/C 채워짐",
     {v["video_id"] for v in sent_excl_rec_pre} == sent_ids_std)
-chk("REC-03: Recent Claude 호출 상한 15 이하",
-    len(to_a_rec) <= 15)
+chk("REC-03: Recent Claude 호출 상한 30 이하",
+    len(to_a_rec) <= 30)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -205,10 +211,10 @@ print("=" * 78)
 
 to_a_rec_off, sent_excl_off = simulate_pre_step_selection(
     profile="recent", exclude_sent=False,
-    passed=passed_std, sent_ids=sent_ids_std, cap=15,
+    passed=passed_std, sent_ids=sent_ids_std, cap=30,
 )
-chk("OFF-01: exclude_sent=False → to_analyze 는 passed[:15] (기존 동작)",
-    [v["video_id"] for v in to_a_rec_off] == [v["video_id"] for v in passed_std[:15]])
+chk("OFF-01: exclude_sent=False → to_analyze 는 passed[:30] (기존 동작)",
+    [v["video_id"] for v in to_a_rec_off] == [v["video_id"] for v in passed_std[:30]])
 chk("OFF-02: exclude_sent=False → 사전 sent_excluded 는 빈 리스트",
     sent_excl_off == [])
 
@@ -223,14 +229,14 @@ print("=" * 78)
 
 std = benchmark_config.resolve_config("standard")
 rec = benchmark_config.resolve_config("recent")
-chk("CFG-01: Standard MAX_ANALYSIS_CANDIDATES=10 유지",
-    std["MAX_ANALYSIS_CANDIDATES"] == 10)
-chk("CFG-02: Recent MAX_ANALYSIS_CANDIDATES=15 유지",
-    rec["MAX_ANALYSIS_CANDIDATES"] == 15)
-chk("CFG-03: Standard FINAL_CANDIDATES=5 유지",
-    std["FINAL_CANDIDATES"] == 5)
-chk("CFG-04: Recent FINAL_CANDIDATES=5 유지",
-    rec["FINAL_CANDIDATES"] == 5)
+chk("CFG-01: Standard MAX_ANALYSIS_CANDIDATES=30 (2026-08-21 상향)",
+    std["MAX_ANALYSIS_CANDIDATES"] == 30)
+chk("CFG-02: Recent MAX_ANALYSIS_CANDIDATES=30 (2026-08-21 상향)",
+    rec["MAX_ANALYSIS_CANDIDATES"] == 30)
+chk("CFG-03: Standard FINAL_CANDIDATES=8 (2026-08-21 상향)",
+    std["FINAL_CANDIDATES"] == 8)
+chk("CFG-04: Recent FINAL_CANDIDATES=8 (2026-08-21 상향)",
+    rec["FINAL_CANDIDATES"] == 8)
 chk("CFG-05: EXCLUDE_SENT_FROM_CANDIDATES 기본 True",
     benchmark_config.BENCHMARK_CONFIG["EXCLUDE_SENT_FROM_CANDIDATES"] is True)
 
@@ -361,7 +367,7 @@ _min_config = {
     "MAX_VIEWS": 3_000_000, "MIN_VIEWS": 50_000, "MAX_SHORTS_PER_CHANNEL": 50,
     "MAX_DURATION_SEC": 180, "MIN_DURATION_SEC": 15,
     "MIN_AGE_DAYS_EXCLUSIVE": None, "UPLOADED_WITHIN_DAYS": 7,
-    "MAX_ANALYSIS_CANDIDATES": 15, "FINAL_CANDIDATES": 5,
+    "MAX_ANALYSIS_CANDIDATES": 30, "FINAL_CANDIDATES": 5,
     "EXCLUDE_CHANNELS": [],
 }
 
