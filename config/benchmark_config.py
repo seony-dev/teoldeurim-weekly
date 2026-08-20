@@ -32,6 +32,9 @@ BENCHMARK_CONFIG = {
         {"name": "로로단", "channel": "https://www.youtube.com/@로로단"},
         # 2026-08-06 대표님 요청 추가
         {"name": "방탄소년(진)", "channel": "https://www.youtube.com/@방탄소년진"},
+        # 2026-08-20 대표님 요청 추가
+        {"name": "빈빵", "channel": "https://www.youtube.com/@bin_ppang"},
+        {"name": "최강정", "channel": "https://www.youtube.com/channel/UC1S7dqM64csgijABH0jtq2A"},
     ],
 
     # ========================================================================
