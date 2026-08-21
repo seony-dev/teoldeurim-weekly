@@ -648,13 +648,16 @@ def run_monday(date_slug, tmp_dir, dry_run=False):
             p.unlink()  # stale 방지
 
     # 1) benchmark recent 실행
+    # 2026-08-21: 참고 채널 10 → 22개 확장 + Claude 분석 상한 15 → 30 상향 후 첫 실행이
+    # ~14분 걸림. 안전 마진 포함해 timeout 900 → 1800 초 (30분) 로 상향.
+    # (Weekly subprocess timeout 은 기존 900 유지, Standard/friday 쪽도 무변경.)
     bm_rc = _run_child(
         SCRIPTS_DIR / "benchmark.py",
         extra_env={
             "PROFILE": profile,
             "REPORT_FRAGMENT_PATH": str(bm_frag_path),
         },
-        timeout=900,
+        timeout=1800,
     )
     bm_ok = (bm_rc == 0) and bm_frag_path.exists()
     if not bm_ok:

@@ -44,7 +44,10 @@ concurrency:
 jobs:
   send-recent-integrated:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 2026-08-21: 참고 채널 10 → 22개 확장 + Recent Claude 분석 상한 15 → 30 상향 이후
+    # 첫 실행이 15분 job timeout 에 걸려 취소됨 (Apify 22채널 스크래핑 ~14분 + Weekly recent
+    # 시작 ~2초 지점). 안전 마진 포함해 40분으로 상향. Standard(weekly.yml) 는 무변경.
+    timeout-minutes: 40
 
     permissions:
       contents: write   # history/ 및 benchmark/history/sent/ 커밋 권한
