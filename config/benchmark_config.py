@@ -40,7 +40,7 @@ BENCHMARK_CONFIG = {
         {"name": "수빈이의 숲", "channel": "https://www.youtube.com/@수빈이의숲"},
         {"name": "샌드위치", "channel": "https://www.youtube.com/@beomgyuprolover"},
         {"name": "다섯별처럼", "channel": "https://www.youtube.com/@다섯별처럼"},
-        {"name": "윤너정", "channel": "https://www.youtube.com/@윤너정"},
+        {"name": "윤너정", "channel": "https://www.youtube.com/channel/UCeeEjvHE2Ah1IUhgdQNFOGg"},
         {"name": "밍귤", "channel": "https://www.youtube.com/@mikang97"},
         {"name": "도도혜혜", "channel": "https://www.youtube.com/@도도혜혜"},
         {"name": "짱캐럿", "channel": "https://www.youtube.com/@jjangCARAT"},
