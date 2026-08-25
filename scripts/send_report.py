@@ -127,6 +127,26 @@ def _reissue_prefix():
     return "[재발송] " if v in ("1", "true", "yes") else ""
 
 
+def _is_test_mode():
+    """TEST_MODE=1/true/yes 이면 True. 검증용 workflow (recipient=RECIPIENT_EMAIL_SELF) 에서 설정.
+
+    영향:
+      · subject 맨 앞에 '[TEST] ' 접두어 추가 (기존 _reissue_prefix 앞에 붙음)
+      · 발송 자체는 정상 수행 (SMTP OK · Gmail 실제 발송)
+      · production sent history 기록은 skip (benchmark/history/sent/{target}/ 저장 X)
+      · 결과: 검증 완료 후에도 후보 dedup pool 이 오염되지 않음
+
+    운영 전환 시엔 workflow yml 에서 TEST_MODE env 만 걷어내면 원상복구.
+    """
+    v = (os.environ.get("TEST_MODE") or "").strip().lower()
+    return v in ("1", "true", "yes")
+
+
+def _test_prefix():
+    """TEST_MODE 이면 '[TEST] ' 반환 (subject 맨 앞)."""
+    return "[TEST] " if _is_test_mode() else ""
+
+
 def _env_snapshot():
     """수신자·SMTP 관련 env 로드 (weekly.load_env 대신 최소 세트만)."""
     keys = ["GMAIL_ADDRESS", "GMAIL_APP_PASSWORD", "RECIPIENT_EMAIL"]
@@ -175,345 +195,46 @@ def _run_child(script, extra_env, timeout=1200):
 
 
 # ============================================================================
-# CSS scope parser — fragment 통합 시 selector 격리
-# ----------------------------------------------------------------------------
-# 목적: Weekly / Benchmark 각 fragment 의 CSS 를 통합 shell 에 그대로 넣으면
-#       .hero / .hero h1 / body 등 공통 selector 가 서로 override 하여 렌더가 깨짐.
-#       → 각 fragment CSS 를 자기 wrapper (.wk-root / .bm-root) scope 로 rewrite.
+# (2026-08-24) Weekly + Benchmark 통합 shell 조립 로직 (`_extract_fragment` /
+# `_build_shell_html` / CSS scope helper 전체) 는 대표님 요청으로 Weekly 파트를
+# 리포트에서 제외하면서 dead code 가 되어 제거되었습니다.
 #
-# 원칙:
-#  - 원본 fragment (weekly.py / benchmark.py) 는 편집하지 않는다.
-#    scope 는 오직 이 통합 shell 조립 단계에서만 적용된다.
-#  - @keyframes / @font-face / @import 는 rewrite 대상이 아니다 (그대로 유지).
-#  - @media / @supports 는 내부 nested rule 을 각각 scope.
-#  - document-level selector 는 실제 declaration 을 유지한 채 wrapper 로 이동:
-#      :root       → wrapper (CSS variable 정의)
-#      body / html → wrapper (typography · color · background)
-#      *           → "wrapper *" (자식 범위로 제한)
-#      html.X ...  → "html.X wrapper ..." (html 조건 유지, wrapper 삽입)
+# 이후 리포트는 benchmark.py 가 자체 생성한 HTML 을 그대로 첨부합니다. Weekly
+# 재활성화가 필요하면 이 커밋 이전 revision 을 참고하세요.
 # ============================================================================
-_RE_TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.DOTALL | re.IGNORECASE)
-_RE_STYLE = re.compile(r"<style[^>]*>(.*?)</style>", re.DOTALL | re.IGNORECASE)
-_RE_BODY = re.compile(r"<body[^>]*>(.*)</body>", re.DOTALL | re.IGNORECASE)
-
-
-def _tokenize_rules(css):
-    """CSS 텍스트를 top-level rule 로 분할. 각 rule 은 dict.
-
-    반환 rule 은 아래 kind 중 하나:
-      kind="rule"          : 일반 selector rule
-      kind="at"            : @media / @supports / @keyframes / @font-face 등 block 형태
-      kind="at-standalone" : @import 등 semicolon 종료 형태
-
-    필드: prelude (selector 또는 at 조건), body (중괄호 내부 원문), at_name.
-    """
-    rules = []
-    i, n = 0, len(css)
-    while i < n:
-        while i < n and css[i] in " \t\n\r":
-            i += 1
-        if i >= n:
-            break
-        if css[i:i+2] == "/*":
-            end = css.find("*/", i + 2)
-            i = (end + 2) if end != -1 else n
-            continue
-        start = i
-        depth_paren = 0
-        while i < n:
-            c = css[i]
-            if c == "(":
-                depth_paren += 1
-            elif c == ")":
-                depth_paren -= 1
-            elif c == "{" and depth_paren == 0:
-                break
-            elif c == ";" and depth_paren == 0 and css[start:i].lstrip().startswith("@"):
-                rt = css[start:i + 1].strip()
-                rules.append({
-                    "kind": "at-standalone",
-                    "at_name": rt.split(None, 1)[0][1:] if rt.startswith("@") else "",
-                    "prelude": rt, "body": "", "raw": rt,
-                })
-                start = i + 1
-                i += 1
-                break
-            i += 1
-        else:
-            break
-        if i >= n or start == i:
-            continue
-        prelude = css[start:i].strip()
-        i += 1  # {
-        body_start, depth = i, 1
-        while i < n and depth > 0:
-            c = css[i]
-            if c == "{":
-                depth += 1
-            elif c == "}":
-                depth -= 1
-                if depth == 0:
-                    break
-            i += 1
-        body = css[body_start:i]
-        raw = css[start:i + 1 if i < n else n]
-        i += 1  # }
-        if prelude.startswith("@"):
-            at_name = prelude[1:].split(None, 1)[0].split("(", 1)[0].split("{", 1)[0]
-            rules.append({"kind": "at", "at_name": at_name,
-                          "prelude": prelude, "body": body, "raw": raw})
-        else:
-            rules.append({"kind": "rule", "at_name": None,
-                          "prelude": prelude, "body": body, "raw": raw})
-    return rules
-
-
-def _split_selectors(prelude):
-    """`a, b(x, y), c` → ['a', 'b(x, y)', 'c']. 괄호 안 콤마는 그대로 유지."""
-    parts, cur, depth = [], "", 0
-    for ch in prelude:
-        if ch == "(":
-            depth += 1
-            cur += ch
-        elif ch == ")":
-            depth -= 1
-            cur += ch
-        elif ch == "," and depth == 0:
-            if cur.strip():
-                parts.append(cur.strip())
-            cur = ""
-        else:
-            cur += ch
-    if cur.strip():
-        parts.append(cur.strip())
-    return parts
-
-
-def _scope_single_selector(sel, prefix):
-    """selector 하나를 wrapper prefix 로 scope. list of scoped selectors 반환.
-
-    root-self 매치 케이스:
-      원본 fragment 의 wrapper 는 `<div class="page wk-root">` 형태로 여러 class 를
-      동시 보유 (`.page` + `.wk-root`). CSS 원본이 `.page { padding: … }` 인데
-      단순히 `.wk-root .page` 로만 rewrite 하면 descendant 만 매치되어 wrapper
-      자신에게는 스타일이 적용 안 됨.
-      → class-based selector 는 root-self compound(`prefix.first_class`) 도 함께 반환.
-      → wrapper 가 `.wk-root.page` 로도 매치되어 원본 layout 이 보존됨.
-    """
-    s = sel.strip()
-    if not s:
-        return []
-    # :root → wrapper (CSS variable 정의는 wrapper 안에서만 상속)
-    if s == ":root":
-        return [prefix]
-    # * → wrapper 자신 + 자손 (universal reset 이 wrapper 에도 적용되어야 함)
-    if s == "*":
-        return [prefix, f"{prefix} *"]
-    head = s.split(None, 1)[0]
-    # body / html → wrapper
-    if s == "body" or s == "html":
-        return [prefix]
-    # html.X descendant (예: "html.js .js-only" → "html.js .wk-root .js-only")
-    if head.startswith("html") and " " in s:
-        cond, _, rest = s.partition(" ")
-        return [f"{cond} {prefix} {rest.strip()}"]
-    if head == "body" and " " in s:
-        _, _, rest = s.partition(" ")
-        return [f"{prefix} {rest.strip()}"]
-    # 일반 selector — descendant 형태 (`.wk-root .foo`)
-    result = [f"{prefix} {s}"]
-    # class-based selector 는 root-self compound (`.wk-root.foo`) 도 추가.
-    # wrapper element 가 여러 class 를 동시에 가질 때 이 형태가 매치됨.
-    if s.startswith("."):
-        result.append(f"{prefix}{s}")
-    return result
-
-
-def _scope_rule(rule, prefix):
-    """단일 rule 을 scope 된 CSS 텍스트로 재조립."""
-    selectors = _split_selectors(rule["prelude"])
-    scoped = []
-    for s in selectors:
-        scoped.extend(_scope_single_selector(s, prefix))
-    # dedup (`body, html` 같이 둘 다 wrapper 로 축약된 경우)
-    seen, uniq = set(), []
-    for s in scoped:
-        if s not in seen:
-            seen.add(s)
-            uniq.append(s)
-    return f"{', '.join(uniq)} {{{rule['body']}}}"
-
-
-def _scope_css(css, prefix):
-    """CSS 전체를 prefix 로 scope 해 반환.
-
-    - @keyframes / @font-face / @import 는 그대로 유지.
-    - @media / @supports 는 wrapper `@media (...) { ... }` 는 유지하고 내부 nested rule 만 scope.
-    - 나머지 top-level rule 은 _scope_rule() 로 rewrite.
-    """
-    rules = _tokenize_rules(css)
-    out = []
-    for r in rules:
-        if r["kind"] == "at-standalone":
-            # @import 등 — 그대로
-            out.append(r["raw"])
-        elif r["kind"] == "at":
-            at = r["at_name"]
-            if at in ("keyframes", "font-face"):
-                # 애니메이션 이름·폰트 정의 — 그대로 (실측 0개이지만 안전용)
-                out.append(r["raw"])
-            elif at in ("media", "supports"):
-                # 내부 nested rule 만 scope
-                nested = _tokenize_rules(r["body"])
-                inner = []
-                for nr in nested:
-                    if nr["kind"] == "at" and nr["at_name"] in ("keyframes", "font-face"):
-                        inner.append(nr["raw"])
-                    elif nr["kind"] == "rule":
-                        inner.append(_scope_rule(nr, prefix))
-                    else:
-                        inner.append(nr["raw"])
-                out.append(f"{r['prelude']} {{\n{chr(10).join(inner)}\n}}")
-            else:
-                # 알려지지 않은 at-rule (예: @layer) — 그대로 (안전 fallback)
-                out.append(r["raw"])
-        else:
-            out.append(_scope_rule(r, prefix))
-    return "\n".join(out)
-
-
-def _extract_fragment(html, root_class):
-    """완전 HTML 에서 body 내용을 root_class(.wk-root/.bm-root) 단위로 추출.
-
-    스타일은 root_class prefix 로 자동 scope 된 형태로 반환.
-    - `.wk-root` 라면 실제 prefix 는 ".wk-root"
-    - `.bm-root` 라면 실제 prefix 는 ".bm-root"
-
-    반환: {"styles": [scoped css text list], "body": body html string, "title": title text}
-    """
-    raw_styles = _RE_STYLE.findall(html)
-    body_m = _RE_BODY.search(html)
-    body_html = body_m.group(1).strip() if body_m else html
-    title_m = _RE_TITLE.search(html)
-    title = title_m.group(1).strip() if title_m else ""
-    prefix = root_class if root_class.startswith(".") else f".{root_class}"
-    scoped_styles = [_scope_css(s, prefix) for s in raw_styles]
-    if root_class not in body_html:
-        _log(f"  ⚠️ fragment 에 {root_class} wrapper 없음 — 격리 위험. shell 조립은 계속.")
-    return {"styles": scoped_styles, "body": body_html, "title": title}
-
-
-SHELL_CSS = """
-:root { --shell-bg:#f4f5f7; --shell-ink:#1c1e21; --shell-line:#d6d9de; --shell-active:#111; }
-body { margin:0; background:var(--shell-bg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; color:var(--shell-ink); }
-.shell-wrap { max-width:1160px; margin:0 auto; padding:24px 16px 48px; }
-.shell-header { padding:20px 4px 12px; }
-.shell-header h1 { margin:0 0 4px; font-size:18px; letter-spacing:-.01em; }
-.shell-header .sub { color:#5d6472; font-size:13px; }
-.shell-tabs { display:flex; gap:0; border-bottom:2px solid var(--shell-line); margin:16px 0 0; position:sticky; top:0; background:var(--shell-bg); z-index:50; }
-.shell-tab { appearance:none; background:transparent; border:0; border-bottom:3px solid transparent; margin-bottom:-2px; padding:12px 18px; font-size:14px; font-weight:600; color:#5d6472; cursor:pointer; }
-.shell-tab.active { color:var(--shell-active); border-bottom-color:var(--shell-active); }
-.shell-tab:hover { color:var(--shell-active); }
-.shell-panel { padding-top:16px; }
-.shell-panel.is-hidden { display:none !important; }
-.shell-footer { color:#8b93a1; font-size:12px; padding:24px 4px 0; }
-"""
-
-
-def _build_shell_html(today_label, wk_frag, bm_frag, wk_summary, bm_summary,
-                     wk_label="Weekly 후보", bm_label="타 채널 Benchmark",
-                     header_sub=None):
-    """상위 2탭 shell HTML 조립.
-
-    Monday에서는 wk_label="Weekly 최근 후보", bm_label="타 채널 Benchmark 최근 후보"로 호출.
-    """
-    all_styles = []
-    for f in (wk_frag, bm_frag):
-        if f:
-            all_styles.extend(f["styles"])
-    styles_html = "\n".join(f"<style>{s}</style>" for s in all_styles)
-
-    wk_body = wk_frag["body"] if wk_frag else '<div class="empty">Weekly 결과 없음</div>'
-    bm_body = bm_frag["body"] if bm_frag else '<div class="empty">Benchmark 결과 없음 (수집 실패 또는 미실행)</div>'
-
-    only_bm = (bm_frag is not None) and (wk_frag is None)
-    # 기본은 wk 탭이 활성 (both/only_wk 케이스). only_bm 이면 bm 탭 활성.
-    if not only_bm:
-        wk_active, wk_hidden = "active", ""
-        bm_active, bm_hidden = "", "is-hidden"
-    else:
-        wk_active, wk_hidden = "", "is-hidden"
-        bm_active, bm_hidden = "active", ""
-
-    sub_line = header_sub or f"{today_label} · {wk_label} + {bm_label}"
-
-    return f"""<!DOCTYPE html>
-<html lang="ko"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<base target="_blank">
-<title>털어드림 통합 리포트 · {today_label}</title>
-<style>{SHELL_CSS}</style>
-{styles_html}
-</head><body>
-<div class="shell-wrap">
-  <header class="shell-header">
-    <h1>털어드림 통합 리포트</h1>
-    <div class="sub">{sub_line}</div>
-  </header>
-  <nav class="shell-tabs" id="shellTabs" role="tablist">
-    <button class="shell-tab {wk_active}" data-tab="wk" type="button" role="tab">{wk_label} <small>{wk_summary}</small></button>
-    <button class="shell-tab {bm_active}" data-tab="bm" type="button" role="tab">{bm_label} <small>{bm_summary}</small></button>
-  </nav>
-  <section class="shell-panel {wk_hidden}" data-tab="wk">
-    {wk_body}
-  </section>
-  <section class="shell-panel {bm_hidden}" data-tab="bm">
-    {bm_body}
-  </section>
-  <footer class="shell-footer">털어드림 자동화 · 통합 리포트 shell</footer>
-</div>
-<script>
-(function() {{
-  var tabs = document.querySelectorAll('#shellTabs .shell-tab');
-  var panels = document.querySelectorAll('.shell-panel');
-  function activate(name) {{
-    for (var i = 0; i < tabs.length; i++) {{
-      tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === name);
-    }}
-    for (var j = 0; j < panels.length; j++) {{
-      var match = panels[j].getAttribute('data-tab') === name;
-      panels[j].classList.toggle('is-hidden', !match);
-    }}
-  }}
-  for (var k = 0; k < tabs.length; k++) {{
-    (function(t) {{
-      t.addEventListener('click', function() {{
-        activate(t.getAttribute('data-tab'));
-      }});
-    }})(tabs[k]);
-  }}
-}})();
-</script>
-</body></html>
-"""
 
 
 # ============================================================================
 # benchmark sent history 저장 (발송 성공 후에만)
 # ============================================================================
-def _record_benchmark_sent(profile, date_slug, video_ids):
-    """benchmark/history/sent/{date}_{profile}.json 생성.
-    video_ids: 이 발송에 포함된 후보들의 video_id 리스트.
+def _record_benchmark_sent(profile, date_slug, video_ids, target_slug=None):
+    """benchmark/history/sent/{target}/{date}_{profile}.json 생성.
+
+    · target_slug 를 넘기면 target namespace 서브디렉에 저장 (신규 구조).
+      target_slug=None 또는 "teoldeurim" 이면서 profile in {recent, standard}
+      인 legacy 호출은 backward compat 로 flat 위치에 저장 — 단, 이후에는 사용 안 함.
+    · legacy call: _record_benchmark_sent(profile, date_slug, video_ids)  → flat 저장
+    · new    call: _record_benchmark_sent(profile, date_slug, video_ids, target_slug="jjalduk")
+                                                                → benchmark/history/sent/jjalduk/*.json
     """
+    if _is_test_mode():
+        _log(f"  ⚠️ TEST_MODE — production sent history 저장 SKIP "
+             f"(target={target_slug!r}, profile={profile!r}, video_ids={len(video_ids)}개)")
+        return None
     if not video_ids:
         _log("  ⚠️ 기록할 video_id 없음 (발송 후보 0개) — sent history 저장 skip")
         return None
-    sent_dir = ROOT / benchmark_config.BENCHMARK_SENT_HISTORY_DIR
+    root = ROOT / benchmark_config.BENCHMARK_SENT_HISTORY_DIR
+    if target_slug:
+        sent_dir = root / target_slug
+    else:
+        sent_dir = root
     sent_dir.mkdir(parents=True, exist_ok=True)
     p = sent_dir / f"{date_slug}_{profile}.json"
     payload = {
         "date_kst": date_slug,
         "profile": profile,
+        "target": target_slug or "",
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "candidates_video_ids": list(video_ids),
         "count": len(video_ids),
@@ -547,89 +268,70 @@ def _load_benchmark_result_ids(raw_json_path):
 # ============================================================================
 # 본문 조립 (정상 0건 vs benchmark 실패는 이 함수 밖에서 이미 분기됨)
 # ============================================================================
-def _monday_body_html(date_slug, wk_count, bm_count, wk_ok, bm_ok):
-    """월요일 recent 통합 본문. Weekly recent + Benchmark recent 두 축.
+def _monday_body_html(date_slug, bm_count):
+    """월·수·금 recent 본문. Benchmark recent 전용 (2026-08-24 Weekly 제거).
 
-    상태:
-      wk_ok=True, bm_ok=True  → 정상 통합 (양쪽 축 개수 표시)
-      wk_ok=True, bm_ok=False → Weekly-only fallback + benchmark 실패 표시
-      wk_ok=False, bm_ok=True → Benchmark-only fallback + weekly 실패 표시
-      wk_ok=False, bm_ok=False → orchestrator raise (여기까지 오지 않음)
+    · 이전 시그니처: (date_slug, wk_count, bm_count, wk_ok, bm_ok)
+    · 이번 시그니처: (date_slug, bm_count)
+      → 발송은 benchmark 성공 시에만 진행되므로 실패 fallback 은 orchestrator raise.
     """
-    # 실패 fallback 표시
-    fail_note = ""
-    if not wk_ok and bm_ok:
-        fail_note = "<p><b>⚠️ 이번 실행에서 Weekly recent 파이프라인이 실패했습니다.</b> " \
-                    "Benchmark 최근 후보만 확인 가능합니다.</p>"
-    elif wk_ok and not bm_ok:
-        fail_note = "<p><b>⚠️ 이번 실행에서 Benchmark recent 파이프라인이 실패했습니다.</b> " \
-                    "Weekly 최근 후보만 확인 가능합니다.</p>"
-
-    # 정상 0건 표시 (실패와 구분)
-    zero_notes = []
-    if wk_ok and wk_count == 0:
-        zero_notes.append("Weekly 최근 후보 <b>0건</b> — 최근 7일 이내 조건(조회수 5만~300만)에 맞는 새 영상이 없습니다.")
-    if bm_ok and bm_count == 0:
-        zero_notes.append("타 채널 Benchmark 최근 후보 <b>0건</b> — 최근 7일 이내 조건에 맞는 새 영상이 없습니다.")
     zero_block = ""
-    if zero_notes:
-        items = "".join(f"<li>{n}</li>" for n in zero_notes)
-        zero_block = (f"<p><b>ℹ️ 정상 실행 결과 중 아래 축은 0건입니다.</b> "
-                      f"수집·필터링·분석은 정상 완료되었습니다.</p><ul>{items}</ul>")
+    if bm_count == 0:
+        zero_block = (
+            "<p><b>ℹ️ 이번 실행 결과 신규 후보 0건입니다.</b> "
+            "수집·필터링·분석은 정상 완료되었으며, 조건에 맞는 새 영상이 없습니다.</p>"
+        )
 
     return f"""<html><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
 <p>안녕하세요, 박서은입니다.</p>
-<p><b>최근 콘텐츠 통합 리포트</b>를 첨부드립니다. (0일 ~ 7일 이내 신규 콘텐츠 · 월·수·금 3회 발송)</p>
-{fail_note}
+<p><b>최근 콘텐츠 리포트</b>를 첨부드립니다. (0일 ~ 7일 이내 신규 콘텐츠 · 월·수·금 3회 발송)</p>
 <ul>
-  <li>Weekly 최근 후보: {wk_count if wk_ok else "실행 실패"}건 (YouTube 검색어 기반, 최신 업로드 순)</li>
-  <li>타 채널 Benchmark 최근 후보: {bm_count if bm_ok else "실행 실패"}건 (4채널 · 최신 업로드 순)</li>
+  <li>Benchmark 최근 후보: {bm_count}건 (참고 채널 인기 Shorts 기반)</li>
   <li>조건: 조회수 5만~300만, 업로드 0~7일</li>
-  <li>중복 제외: 과거 Weekly 발송 + 이전 Benchmark 리포트 이력 (cross-profile dedup)</li>
+  <li>중복 제외: 이전 Benchmark 리포트 발송 이력</li>
 </ul>
 {zero_block}
-<p>첨부 HTML 상단의 두 탭 [Weekly 최근 후보 / 타 채널 Benchmark 최근 후보]으로 각각 확인 가능합니다.</p>
+<p>첨부 HTML 에서 상세 후보를 확인해주세요.</p>
 </body></html>"""
 
 
-def _friday_body_html(date_slug, wk_count, bm_count, bm_ok, notice_html=""):
-    """금요일 통합 본문. bm_ok=False 는 benchmark 실행 자체 실패 (weekly-only fallback).
+def _friday_body_html(date_slug, bm_count, notice_html=""):
+    """격주 금 · 털어드림 Standard 본문 (Weekly Bundle 과 별도 메일).
 
     notice_html 은 최상단에 삽입될 안내 박스 (비어 있으면 미노출).
     """
-    if not bm_ok:
-        # weekly-only fallback
-        return f"""<html><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
-{notice_html}<p>안녕하세요, 박서은입니다.</p>
-<p><b>⚠️ 이번 실행에서 benchmark 파이프라인이 실패했습니다.</b> Weekly 후보만 확인 가능합니다.</p>
-<ul>
-  <li>Weekly 후보: {wk_count}건 (YouTube 검색어 기반)</li>
-  <li>타 채널 Benchmark: 실행 실패 (재실행 시 후보 중복 제외에 영향 없음)</li>
-</ul>
-<p>첨부 HTML에는 Weekly 탭만 실질 데이터가 들어 있습니다.</p>
-</body></html>"""
-    # 정상 실행. 각 축의 0건 상태를 문구로 명시.
-    zero_notes = []
-    if wk_count == 0:
-        zero_notes.append("Weekly 신규 후보 <b>0건</b> — 이번 격주 조건에 맞는 새 영상이 없습니다.")
-    if bm_count == 0:
-        zero_notes.append("타 채널 Benchmark 신규 후보 <b>0건</b> — 조건에 맞는 새 영상이 없습니다.")
     zero_block = ""
-    if zero_notes:
-        items = "".join(f"<li>{n}</li>" for n in zero_notes)
+    if bm_count == 0:
         zero_block = (
-            f"<p><b>ℹ️ 정상 실행 결과 중 아래 축은 0건입니다.</b> "
-            f"수집·필터링·분석은 정상 완료되었습니다.</p><ul>{items}</ul>"
+            "<p style='background:#fffbeb;border-left:3px solid #d97706;"
+            "padding:8px 12px;margin:12px 0;border-radius:0 4px 4px 0'>"
+            "ℹ️ <b>이번 격주 신규 후보 0건입니다.</b> "
+            "수집·필터링·AI 분석은 정상 완료되었으며, 조건에 맞는 새 영상이 없습니다.</p>"
         )
-    return f"""<html><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
+    return f"""<html><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;line-height:1.6;color:#111;max-width:640px">
 {notice_html}<p>안녕하세요, 박서은입니다.</p>
-<p>이번 격주 <b>통합 리포트</b>를 첨부드립니다.</p>
-<ul>
-  <li>Weekly 후보: {wk_count}건 (YouTube 검색어 기반)</li>
-  <li>타 채널 Benchmark: {bm_count}건 (4채널 인기 Shorts + 두 축 점수)</li>
-  <li>첨부 HTML 상단의 두 탭 [Weekly 후보 / 타 채널 Benchmark]으로 각각 확인 가능</li>
+<p>이번 격주 <b>털어드림 Standard Benchmark 리포트</b> 를 첨부드립니다. Weekly (매주 금 발송) 와 별개로, <b>업로드 30일 초과 ~ 1년 이내 · 조회수 50만~900만</b> 조건의 후보를 뽑아드리는 격주 리포트입니다.</p>
+
+<h3 style="margin-top:20px;margin-bottom:8px;font-size:15px">📎 이번 리포트</h3>
+<ul style="margin:4px 0 12px 20px">
+  <li><b>털어드림 Standard</b> · 이번 격주 후보 <b>{bm_count}건</b> (첨부 HTML 참조)</li>
 </ul>
 {zero_block}
+
+<h3 style="margin-top:20px;margin-bottom:8px;font-size:15px">🔎 후보 선정 방식</h3>
+<ul style="margin:4px 0 12px 20px">
+  <li>털어드림 Reference 7개 채널의 인기 Shorts 를 수집한 뒤 조건 통과 영상 중 <b>조회수 상위 최대 30개</b> 를 AI 로 분석합니다. 조건 통과가 30개보다 적으면 실제 남은 후보만 분석합니다.</li>
+  <li>AI 분석에서 <b>직접 활용 후보 최대 5개</b> + <b>Benchmark 활용 후보 최대 5개</b> 를 각각 뽑습니다 (상호 배타적, 실제 노출 0~10건 범위).</li>
+  <li>이전에 이미 발송된 후보는 Weekly · Standard 통틀어 자동 제외됩니다.</li>
+</ul>
+
+<h3 style="margin-top:20px;margin-bottom:8px;font-size:15px">💡 참고 사항</h3>
+<ul style="margin:4px 0 12px 20px">
+  <li>영상 <b>제목은 유튜브 원본(한국어)</b> 을 사용합니다.</li>
+  <li>리포트의 <b>공통 패턴·리프트·소재 인사이트는 상관관계 기반 관찰</b> 로, 정답이나 성과 예측값이 아닙니다. <b>기획 참고 및 A/B 테스트 신호</b> 로만 활용해주세요.</li>
+</ul>
+
+<p style="margin-top:20px;color:#71717a;font-size:12px">— 자동화 봇 · {date_slug} KST</p>
 </body></html>"""
 
 
@@ -637,20 +339,27 @@ def _friday_body_html(date_slug, wk_count, bm_count, bm_ok, notice_html=""):
 # mode: monday (recent)
 # ============================================================================
 def run_monday(date_slug, tmp_dir, dry_run=False):
-    """월요일 통합 리포트: Weekly recent + Benchmark recent.
-    흐름: benchmark → weekly → 상위 2탭 shell 조립 → preview → 발송 → sent 기록
+    """월·수·금 recent 리포트: Benchmark recent 전용 (2026-08-24 대표님 요청으로 Weekly 제거).
+
+    흐름: benchmark recent 실행 → HTML 그대로 발송 → 성공 시 sent history 기록.
+
+    이전 (Weekly + Benchmark 통합) 구조:
+      benchmark → weekly → 상위 2탭 shell 조립 → 발송
+    이번 변경 (Benchmark 전용):
+      benchmark → HTML 그대로 → 발송
+
+    weekly.py 자체는 남겨두어 향후 재활성화 시 활용 가능. workflow_dispatch
+    옵션 (recipient_override / report_date / notice / reissue / exclude_top_n_views)
+    은 그대로 유지.
     """
     profile = "recent"
     bm_frag_path = tmp_dir / f"{date_slug}_bm_{profile}.html"
-    wk_frag_path = tmp_dir / f"{date_slug}_wk_{profile}.html"
-    for p in (bm_frag_path, wk_frag_path):
-        if p.exists():
-            p.unlink()  # stale 방지
+    if bm_frag_path.exists():
+        bm_frag_path.unlink()  # stale 방지
 
-    # 1) benchmark recent 실행
+    # benchmark recent 실행
     # 2026-08-21: 참고 채널 10 → 22개 확장 + Claude 분석 상한 15 → 30 상향 후 첫 실행이
     # ~14분 걸림. 안전 마진 포함해 timeout 900 → 1800 초 (30분) 로 상향.
-    # (Weekly subprocess timeout 은 기존 900 유지, Standard/friday 쪽도 무변경.)
     bm_rc = _run_child(
         SCRIPTS_DIR / "benchmark.py",
         extra_env={
@@ -661,67 +370,28 @@ def run_monday(date_slug, tmp_dir, dry_run=False):
     )
     bm_ok = (bm_rc == 0) and bm_frag_path.exists()
     if not bm_ok:
-        _log(f"  ⚠️ benchmark({profile}) 실패 (rc={bm_rc}, fragment={bm_frag_path.exists()}) "
-             f"— 이어서 weekly recent 시도")
+        raise RuntimeError(
+            f"Monday recent: benchmark 실패 (rc={bm_rc}, fragment={bm_frag_path.exists()}) "
+            f"— 리포트 조립 불가"
+        )
 
-    # 2) weekly recent 실행 (SEND_EMAIL_DISABLED=1 로 자체 발송 스킵)
-    #    · DRY_RUN 상속 → weekly.py 자체 로직으로 history 저장도 skip
-    #    · production → history/YYYY-MM-DD_recent.json 저장 (cross-profile dedup 근거)
-    wk_env = {
-        "WEEKLY_PROFILE": profile,
-        "REPORT_FRAGMENT_PATH": str(wk_frag_path),
-        "SEND_EMAIL_DISABLED": "1",
-    }
-    wk_rc = _run_child(SCRIPTS_DIR / "weekly.py", extra_env=wk_env, timeout=900)
-    wk_ok = (wk_rc == 0) and wk_frag_path.exists()
-    if not wk_ok:
-        _log(f"  ⚠️ weekly({profile}) 실패 (rc={wk_rc}, fragment={wk_frag_path.exists()})")
-
-    if not wk_ok and not bm_ok:
-        raise RuntimeError(f"Monday recent: benchmark·weekly 모두 실패 → orchestrator 종료")
-
-    # 3) fragment 추출 → 상위 2탭 shell 조립
-    wk_frag = None
-    if wk_ok:
-        wk_html = wk_frag_path.read_text(encoding="utf-8")
-        wk_frag = _extract_fragment(wk_html, ".wk-root")
-    bm_frag = None
-    bm_video_ids = []
-    if bm_ok:
-        bm_html = bm_frag_path.read_text(encoding="utf-8")
-        bm_frag = _extract_fragment(bm_html, ".bm-root")
-        bm_raw_path = ROOT / "benchmark" / f"{date_slug}_{profile}_filtered_raw.json"
-        bm_video_ids = _load_benchmark_result_ids(bm_raw_path)
-
-    wk_count = _count_weekly_candidates(wk_frag_path.read_text(encoding="utf-8")) if wk_ok else 0
+    bm_html = bm_frag_path.read_text(encoding="utf-8")
+    bm_raw_path = ROOT / "benchmark" / f"{date_slug}_{profile}_filtered_raw.json"
+    bm_video_ids = _load_benchmark_result_ids(bm_raw_path)
     bm_count = len(bm_video_ids)
 
-    wk_summary = "· 실행 실패" if not wk_ok else f"· {wk_count}건"
-    bm_summary = "· 실행 실패" if not bm_ok else f"· {bm_count}건"
-
-    shell_html = _build_shell_html(
-        date_slug, wk_frag, bm_frag,
-        wk_summary=wk_summary, bm_summary=bm_summary,
-        wk_label="Weekly 최근 후보",
-        bm_label="타 채널 Benchmark 최근 후보",
-        header_sub=f"{date_slug} · 최근 7일 이내 콘텐츠 (Weekly recent + Benchmark recent)",
-    )
-
-    # subject
-    if not wk_ok:
-        subject = f"[털어드림 최근 콘텐츠] {date_slug} · Benchmark {bm_count}건 (⚠️ Weekly recent 실패)"
-    elif not bm_ok:
-        subject = f"[털어드림 최근 콘텐츠] {date_slug} · Weekly {wk_count}건 (⚠️ Benchmark recent 실패)"
-    elif wk_count == 0 and bm_count == 0:
-        subject = f"[털어드림 최근 콘텐츠] {date_slug} · 신규 후보 없음 (Weekly 0 / Benchmark 0)"
+    # subject — Benchmark 전용 (Weekly 카운트 제거)
+    if bm_count == 0:
+        subject = f"[털어드림 최근 콘텐츠] {date_slug} · 신규 후보 없음"
     else:
-        subject = f"[털어드림 최근 콘텐츠] {date_slug} · Weekly {wk_count} + Benchmark {bm_count}"
+        subject = f"[털어드림 최근 콘텐츠] {date_slug} · Benchmark {bm_count}건"
+    subject = _test_prefix() + subject
 
-    body_html = _monday_body_html(date_slug, wk_count, bm_count, wk_ok, bm_ok)
+    body_html = _monday_body_html(date_slug, bm_count)
 
-    # preview 저장 (항상)
+    # preview 저장 (첨부용 HTML = benchmark 자체 HTML 그대로)
     preview_path = LOCAL_OUTPUT_DIR / f"preview_monday_{date_slug}.html"
-    preview_path.write_text(shell_html, encoding="utf-8")
+    preview_path.write_text(bm_html, encoding="utf-8")
     body_preview_path = LOCAL_OUTPUT_DIR / f"preview_monday_body_{date_slug}.html"
     body_preview_path.write_text(body_html, encoding="utf-8")
     _log(f"  💾 preview 저장: {preview_path.relative_to(ROOT)}")
@@ -730,7 +400,7 @@ def run_monday(date_slug, tmp_dir, dry_run=False):
     # DRY_RUN 분기 — 발송·sent history 기록 skip
     if dry_run:
         _log("  ⚠️ DRY_RUN — Gmail 발송 SKIP / benchmark sent history 기록 SKIP")
-        _log(f"     상태: wk_ok={wk_ok}({wk_count}), bm_ok={bm_ok}({bm_count}), subject={subject!r}")
+        _log(f"     상태: bm_count={bm_count}, subject={subject!r}")
         return
 
     env = _env_snapshot()
@@ -739,110 +409,237 @@ def run_monday(date_slug, tmp_dir, dry_run=False):
         env,
         subject=subject,
         html_body=body_html,
-        attachment_html=shell_html,
+        attachment_html=bm_html,
         attachment_filename=f"teoldeurim_recent_{date_slug}.html",
     )
     _log("  ✅ 발송 완료")
 
-    # 발송 성공 후에만 benchmark sent history 기록 (benchmark 성공한 경우만)
-    if bm_ok:
-        _record_benchmark_sent(profile, date_slug, bm_video_ids)
+    # 발송 성공 후 benchmark sent history 기록
+    _record_benchmark_sent(profile, date_slug, bm_video_ids)
+
+
+# ============================================================================
+# mode: weekly-bundle — 매주 금 3-target Weekly Bundle (2026-08-25 신설)
+#   · target=teoldeurim / myohanduk / jjalduk 각각 mode=weekly 실행
+#   · HTML 3개 생성 성공 후에만 Gmail 1통 발송 (첨부 3개)
+#   · 부분 실패 시 발송·sent history 기록 모두 skip
+# ============================================================================
+_WEEKLY_BUNDLE_TARGETS = [
+    ("teoldeurim", "털어드림"),
+    ("myohanduk",  "묘한덕질"),
+    ("jjalduk",    "짤덕방"),
+]
+
+
+def _run_target_weekly(date_slug, tmp_dir, target_slug):
+    """단일 target × mode=weekly 실행. 성공 시 (html, video_ids) 반환, 실패 시 None."""
+    bm_frag_path = tmp_dir / f"{date_slug}_{target_slug}_weekly.html"
+    if bm_frag_path.exists():
+        bm_frag_path.unlink()
+    rc = _run_child(
+        SCRIPTS_DIR / "benchmark.py",
+        extra_env={
+            "TARGET": target_slug,
+            "MODE": "weekly",
+            # backward compat: teoldeurim/weekly → PROFILE=recent (기존 파일명 유지)
+            "PROFILE": "recent" if target_slug == "teoldeurim" else "weekly",
+            "REPORT_FRAGMENT_PATH": str(bm_frag_path),
+        },
+        timeout=1800,
+    )
+    ok = (rc == 0) and bm_frag_path.exists()
+    if not ok:
+        _log(f"  ⚠️ Weekly Bundle · {target_slug}: benchmark 실패 "
+             f"(rc={rc}, fragment={bm_frag_path.exists()})")
+        return None
+    html = bm_frag_path.read_text(encoding="utf-8")
+    # filtered_raw 위치 규칙: teoldeurim 은 기존 형식 (_recent), 그 외는 _weekly
+    if target_slug == "teoldeurim":
+        raw_path = ROOT / "benchmark" / f"{date_slug}_recent_filtered_raw.json"
     else:
-        _log("  ⚠️ benchmark recent 실패로 sent history 미기록")
+        raw_path = ROOT / "benchmark" / f"{date_slug}_{target_slug}_weekly_filtered_raw.json"
+    video_ids = _load_benchmark_result_ids(raw_path)
+    return {"html": html, "video_ids": video_ids, "raw_path": raw_path}
+
+
+def _weekly_bundle_body_html(date_slug, counts, notice_html=""):
+    """Weekly Bundle 본문 — 사람이 바로 이해할 수 있게 작성.
+
+    counts: [("털어드림", N), ("묘한덕질", N), ("짤덕방", N)]
+    """
+    count_lines = "".join(
+        f'  <li><b>{_html.escape(name)}</b> · 이번 주 후보 <b>{c}건</b> '
+        f'(첨부 HTML 참조)</li>'
+        for name, c in counts
+    )
+    zero_note = ""
+    if all(c == 0 for _, c in counts):
+        zero_note = (
+            "<p style='background:#fffbeb;border-left:3px solid #d97706;"
+            "padding:8px 12px;margin:12px 0;border-radius:0 4px 4px 0'>"
+            "ℹ️ <b>3개 채널 모두 이번 주 신규 후보 0건입니다.</b> "
+            "수집·필터링·AI 분석은 정상 완료되었으며, 조건에 맞는 새 영상이 없습니다.</p>"
+        )
+    return f"""<html><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;line-height:1.6;color:#111;max-width:640px">
+{notice_html}<p>안녕하세요, 박서은입니다.</p>
+<p>이번 주 <b>Weekly Benchmark 리포트</b> 3개 채널분을 한 통에 모아 보내드립니다. 첨부된 HTML 파일 3개 (각 채널별) 에서 상세 후보와 기획 포인트를 확인하실 수 있습니다.</p>
+
+<h3 style="margin-top:20px;margin-bottom:8px;font-size:15px">📎 첨부된 채널 리포트</h3>
+<ul style="margin:4px 0 12px 20px">
+{count_lines}
+</ul>
+{zero_note}
+
+<h3 style="margin-top:20px;margin-bottom:8px;font-size:15px">🔎 이번 주 후보 선정 방식</h3>
+<ul style="margin:4px 0 12px 20px">
+  <li>각 채널은 <b>자기 채널의 성격·운영 방향·Reference 채널 목록</b> 을 기준으로 후보를 <b>별도로</b> 분석합니다. 세 채널 후보는 서로 섞이지 않습니다.</li>
+  <li>Reference 채널의 인기 Shorts 를 수집한 뒤 조회수·업로드 기간·길이 조건을 통과한 영상 중 <b>조회수 상위 최대 30개</b> 를 AI 로 분석합니다. 조건 통과 후보가 30개보다 적으면 남은 후보 수만큼만 분석합니다.</li>
+  <li>AI 분석 결과에서 두 축으로 후보를 뽑습니다:
+    <ul style="margin:2px 0 2px 18px">
+      <li><b>직접 활용 후보 최대 5개</b> — 우리 채널에 그대로 (또는 재해석해) 가져갈 만한 영상</li>
+      <li><b>Benchmark 활용 후보 최대 5개</b> — 훅·제목 구조·팬덤 반응 등 재사용 가치가 높은 참고 영상</li>
+    </ul>
+    각각 최대 5개까지이며 두 리스트는 상호 배타적입니다. 실제 노출 수는 분석 결과에 따라 <b>0~10건</b> 범위에서 결정됩니다.</li>
+  <li>이전에 이미 발송된 후보는 채널별로 자동 제외됩니다 (묘한덕질/짤덕방은 신규 도입이므로 첫 주는 제외 없음).</li>
+</ul>
+
+<h3 style="margin-top:20px;margin-bottom:8px;font-size:15px">💡 참고 사항</h3>
+<ul style="margin:4px 0 12px 20px">
+  <li>영상 <b>제목은 유튜브 원본(한국어)</b> 을 사용합니다 (번역본 아님).</li>
+  <li>리포트에 표시된 <b>공통 패턴·리프트·소재 인사이트는 상관관계 기반 관찰</b> 로, 정답이나 성과 예측값이 아닙니다. <b>기획 참고 및 A/B 테스트 신호</b> 로만 활용해주세요.</li>
+</ul>
+
+<p style="margin-top:20px;color:#71717a;font-size:12px">— 자동화 봇 · {date_slug} KST</p>
+</body></html>"""
+
+
+def run_weekly_bundle(date_slug, tmp_dir, dry_run=False):
+    """매주 금 08:42 KST — 3 target × mode=weekly 통합 Bundle 메일.
+
+    부분 실패 시 발송·sent 기록 모두 skip (raise). 3개 모두 성공한 경우에만 1통 발송.
+    """
+    results = []
+    for slug, name in _WEEKLY_BUNDLE_TARGETS:
+        _log(f"\n▶ Weekly Bundle · {name} ({slug}) 실행")
+        r = _run_target_weekly(date_slug, tmp_dir, slug)
+        results.append({"slug": slug, "name": name, "ok": r is not None, "data": r})
+
+    ok_all = all(r["ok"] for r in results)
+    if not ok_all:
+        failed = [r["name"] for r in results if not r["ok"]]
+        raise RuntimeError(
+            f"Weekly Bundle 부분 실패 — 발송 skip. 실패 target: {failed}. "
+            f"sent history 기록 없음. 다음 실행에서 재시도됩니다."
+        )
+
+    counts = [(r["name"], len(r["data"]["video_ids"])) for r in results]
+    total = sum(n for _, n in counts)
+    if total == 0:
+        subject = f"[털어드림/묘한덕질/짤덕방 Weekly] {date_slug} · 신규 후보 없음"
+    else:
+        parts = " / ".join(f"{n}건" for _, n in counts)
+        subject = f"[털어드림/묘한덕질/짤덕방 Weekly] {date_slug} · {parts}"
+    subject = _test_prefix() + _reissue_prefix() + subject
+
+    notice_block = _notice_html(os.environ.get("NOTICE", ""))
+    body_html = _weekly_bundle_body_html(date_slug, counts, notice_html=notice_block)
+
+    # preview 저장 (3개 HTML + body)
+    body_preview_path = LOCAL_OUTPUT_DIR / f"preview_weekly_bundle_body_{date_slug}.html"
+    body_preview_path.write_text(body_html, encoding="utf-8")
+    _log(f"  💾 body preview: {body_preview_path.relative_to(ROOT)}")
+    for r in results:
+        p = LOCAL_OUTPUT_DIR / f"preview_weekly_{r['slug']}_{date_slug}.html"
+        p.write_text(r["data"]["html"], encoding="utf-8")
+        _log(f"  💾 preview [{r['slug']}]: {p.relative_to(ROOT)}")
+
+    if dry_run:
+        _log("  ⚠️ DRY_RUN — Gmail 발송 SKIP / benchmark sent history 기록 SKIP")
+        _log(f"     상태: counts={counts}, subject={subject!r}")
+        return
+
+    # 3개 첨부 (첫 번째는 attachment_html, 나머지는 extra_attachments)
+    first = results[0]
+    extras = []
+    for r in results[1:]:
+        extras.append((f"{r['slug']}_weekly_{date_slug}.html", r["data"]["html"]))
+
+    env = _env_snapshot()
+    _log(f"\n📮 [weekly-bundle] 발송 → {env['RECIPIENT_EMAIL']} (첨부 {len(results)}개)")
+    send_email(
+        env,
+        subject=subject,
+        html_body=body_html,
+        attachment_html=first["data"]["html"],
+        attachment_filename=f"{first['slug']}_weekly_{date_slug}.html",
+        extra_attachments=extras,
+    )
+    _log("  ✅ 발송 완료")
+
+    # 발송 성공 후에만 각 target sent history 기록
+    for r in results:
+        _record_benchmark_sent("weekly", date_slug, r["data"]["video_ids"],
+                               target_slug=r["slug"])
 
 
 # ============================================================================
-# mode: friday (standard 통합)
+# mode: friday (standard) — 격주 금 08:47 KST, 털어드림 Standard 별도 메일
 # ============================================================================
-def _count_weekly_candidates(wk_html):
-    """weekly fragment HTML에서 candidate 카드 개수 대략 추정 (표시용 카운트)."""
-    # weekly의 최종 카드는 render_candidate_card가 만드는 .candidate 요소.
-    return wk_html.count('class="candidate"')
-
-
 def run_friday(date_slug, tmp_dir, dry_run=False):
-    """금요일 통합 리포트: benchmark(standard) → weekly → 통합 shell → 발송.
-    흐름: benchmark → weekly → shell 조립 → preview 저장 → (DRY_RUN skip) → 발송 → 성공 시 sent 기록
+    """금요일 격주 standard 리포트: Benchmark standard 전용 (2026-08-24 대표님 요청으로 Weekly 제거).
+
+    흐름: benchmark standard 실행 → HTML 그대로 발송 → 성공 시 sent history 기록.
+
+    이전 (Weekly + Benchmark 통합) 구조:
+      benchmark → weekly → shell 조립 → 발송
+    이번 변경 (Benchmark 전용):
+      benchmark → HTML 그대로 → 발송
+
+    REISSUE / NOTICE / REPORT_DATE 옵션은 그대로 유지. weekly.py 자체는
+    남겨두어 향후 재활성화 시 활용 가능.
     """
     profile = "standard"
+    target_slug = "teoldeurim"
     bm_frag_path = tmp_dir / f"{date_slug}_bm_{profile}.html"
-    wk_frag_path = tmp_dir / f"{date_slug}_wk.html"
-    for p in (bm_frag_path, wk_frag_path):
-        if p.exists():
-            p.unlink()  # stale 방지
+    if bm_frag_path.exists():
+        bm_frag_path.unlink()  # stale 방지
 
-    # 1) benchmark 먼저 (weekly history 오염 방지)
     bm_rc = _run_child(
         SCRIPTS_DIR / "benchmark.py",
         extra_env={
-            "PROFILE": profile,
+            "TARGET": target_slug,
+            "MODE": profile,
+            "PROFILE": profile,   # backward compat
             "REPORT_FRAGMENT_PATH": str(bm_frag_path),
         },
-        timeout=900,
+        timeout=1800,
     )
     bm_ok = (bm_rc == 0) and bm_frag_path.exists()
     if not bm_ok:
-        _log(f"  ⚠️ benchmark 실패 (rc={bm_rc}, fragment={bm_frag_path.exists()}) "
-             f"— weekly-only fallback 진행")
-
-    # 2) weekly (자체 SMTP 발송은 SEND_EMAIL_DISABLED=1 로 항상 스킵)
-    #    · DRY_RUN 은 extra_env로 명시하지 않음. _run_child가 os.environ.copy()로
-    #      부모 shell 의 env 를 전체 상속하므로 DRY_RUN=1 도 자연스레 자식에게 전달됨.
-    #    · PROD 실행 (DRY_RUN 미설정):
-    #        weekly.py는 history/YYYY-MM-DD.json 정상 저장 + 자체 발송만 SEND_EMAIL_DISABLED로 skip
-    #        → orchestrator 가 통합 shell 을 조립해 대신 발송
-    #    · DRY_RUN=1 실행:
-    #        weekly.py 도 자체 DRY_RUN 로직 발동 → history 저장 skip + 자체 발송 skip
-    #        → orchestrator 정의 (DRY_RUN=1 은 mode 무관하게 발송·history 저장 X) 와 일치
-    wk_env = {
-        "REPORT_FRAGMENT_PATH": str(wk_frag_path),
-        "SEND_EMAIL_DISABLED": "1",
-    }
-    wk_rc = _run_child(SCRIPTS_DIR / "weekly.py", extra_env=wk_env, timeout=900)
-    if wk_rc != 0 or not wk_frag_path.exists():
         raise RuntimeError(
-            f"weekly 실패 (rc={wk_rc}, fragment={wk_frag_path.exists()}) — "
-            f"통합 리포트 조립 불가"
+            f"Friday standard: benchmark 실패 (rc={bm_rc}, fragment={bm_frag_path.exists()}) "
+            f"— 리포트 조립 불가"
         )
 
-    wk_html = wk_frag_path.read_text(encoding="utf-8")
-    bm_html = bm_frag_path.read_text(encoding="utf-8") if bm_ok else None
-
-    # 3) fragment 추출 → shell 조립
-    wk_frag = _extract_fragment(wk_html, ".wk-root")
-    bm_frag = _extract_fragment(bm_html, ".bm-root") if bm_html else None
-
-    # 후보 id 확보 (bm) + 카운트
-    bm_video_ids = []
-    if bm_ok:
-        bm_raw_path = ROOT / "benchmark" / f"{date_slug}_{profile}_filtered_raw.json"
-        bm_video_ids = _load_benchmark_result_ids(bm_raw_path)
-    wk_count = _count_weekly_candidates(wk_html)
+    bm_html = bm_frag_path.read_text(encoding="utf-8")
+    # target=teoldeurim 은 기존 파일명 유지 (benchmark.py 규칙).
+    bm_raw_path = ROOT / "benchmark" / f"{date_slug}_{profile}_filtered_raw.json"
+    bm_video_ids = _load_benchmark_result_ids(bm_raw_path)
     bm_count = len(bm_video_ids)
 
-    wk_summary = f"· {wk_count}건"
-    bm_summary = "· 실행 실패" if not bm_ok else f"· {bm_count}건"
-
-    shell_html = _build_shell_html(date_slug, wk_frag, bm_frag,
-                                   wk_summary=wk_summary,
-                                   bm_summary=bm_summary)
-
-    # subject: 정상 0건 vs benchmark 실패 구분. REISSUE=true 이면 맨 앞에 [재발송] 붙임.
-    if not bm_ok:
-        subject = f"[털어드림 격주 후보] {date_slug} · Weekly {wk_count}건 (⚠️ benchmark 실패)"
-    elif wk_count == 0 and bm_count == 0:
-        subject = f"[털어드림 격주 후보] {date_slug} · 신규 후보 없음 (Weekly 0 / Benchmark 0)"
+    # subject: 정상 0건 처리. REISSUE=true 이면 맨 앞에 [재발송] 붙임.
+    if bm_count == 0:
+        subject = f"[털어드림 격주 후보] {date_slug} · 신규 후보 없음"
     else:
-        subject = f"[털어드림 격주 후보] {date_slug} · Weekly {wk_count} + Benchmark {bm_count}"
-    subject = _reissue_prefix() + subject
+        subject = f"[털어드림 격주 후보] {date_slug} · Benchmark {bm_count}건"
+    subject = _test_prefix() + _reissue_prefix() + subject
 
     notice_block = _notice_html(os.environ.get("NOTICE", ""))
-    body_html = _friday_body_html(date_slug, wk_count, bm_count, bm_ok,
-                                   notice_html=notice_block)
+    body_html = _friday_body_html(date_slug, bm_count, notice_html=notice_block)
 
-    # preview 저장 (항상)
+    # preview 저장 (첨부용 HTML = benchmark 자체 HTML 그대로)
     preview_path = LOCAL_OUTPUT_DIR / f"preview_friday_{date_slug}.html"
-    preview_path.write_text(shell_html, encoding="utf-8")
+    preview_path.write_text(bm_html, encoding="utf-8")
     body_preview_path = LOCAL_OUTPUT_DIR / f"preview_friday_body_{date_slug}.html"
     body_preview_path.write_text(body_html, encoding="utf-8")
     _log(f"  💾 preview 저장: {preview_path.relative_to(ROOT)}")
@@ -851,25 +648,23 @@ def run_friday(date_slug, tmp_dir, dry_run=False):
     # DRY_RUN 분기 — 발송·sent history 기록 skip
     if dry_run:
         _log("  ⚠️ DRY_RUN — Gmail 발송 SKIP / benchmark sent history 기록 SKIP")
-        _log(f"     상태: bm_ok={bm_ok}, wk_count={wk_count}, bm_count={bm_count}, subject={subject!r}")
+        _log(f"     상태: bm_count={bm_count}, subject={subject!r}")
         return
 
     env = _env_snapshot()
-    _log(f"\n📮 [friday] 발송 → {env['RECIPIENT_EMAIL']}")
+    _log(f"\n📮 [friday standard] 발송 → {env['RECIPIENT_EMAIL']}")
     send_email(
         env,
         subject=subject,
         html_body=body_html,
-        attachment_html=shell_html,
-        attachment_filename=f"teoldeurim_integrated_{date_slug}.html",
+        attachment_html=bm_html,
+        attachment_filename=f"teoldeurim_standard_{date_slug}.html",
     )
     _log("  ✅ 발송 완료")
 
-    # 발송 성공 후 sent history 기록 (benchmark 성공한 경우만)
-    if bm_ok:
-        _record_benchmark_sent(profile, date_slug, bm_video_ids)
-    else:
-        _log("  ⚠️ benchmark 실패로 sent history 미기록 (다음 실행에서 후보 재검토됨)")
+    # 발송 성공 후 sent history 기록 — 신규 namespaced 위치에 저장
+    _record_benchmark_sent(profile, date_slug, bm_video_ids,
+                           target_slug=target_slug)
 
 
 # ============================================================================
@@ -877,7 +672,13 @@ def run_friday(date_slug, tmp_dir, dry_run=False):
 # ============================================================================
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", required=True, choices=["monday", "friday"])
+    parser.add_argument(
+        "--mode", required=True,
+        choices=["monday", "friday", "weekly-bundle"],
+        help=("monday: legacy Recent 실행 (workflow 미사용, 수동 검증용). "
+              "friday: 격주 금 · 털어드림 Standard 별도 메일. "
+              "weekly-bundle: 매주 금 · 3-target Weekly 통합 메일."),
+    )
     args = parser.parse_args()
 
     _load_dotenv_if_present()
@@ -906,6 +707,8 @@ def main():
             run_monday(date_slug, tmp_dir, dry_run=dry_run)
         elif args.mode == "friday":
             run_friday(date_slug, tmp_dir, dry_run=dry_run)
+        elif args.mode == "weekly-bundle":
+            run_weekly_bundle(date_slug, tmp_dir, dry_run=dry_run)
         _log("\n✅ orchestrator 완료")
     except Exception as e:
         err = f"orchestrator 실행 실패:\n\n{e}\n\n{traceback.format_exc()}"

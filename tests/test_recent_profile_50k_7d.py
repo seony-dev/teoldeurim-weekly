@@ -378,7 +378,8 @@ if "send_report" in sys.modules: del sys.modules["send_report"]
 os.environ.pop("REPORT_DATE", None); os.environ.pop("NOTICE", None); os.environ.pop("REISSUE", None)
 import send_report
 
-body = send_report._monday_body_html("2026-07-22", 5, 3, True, True)
+# (2026-08-24) Weekly 제거 → 시그니처 (date_slug, bm_count)
+body = send_report._monday_body_html("2026-07-22", 3)
 chk("STR-03: monday body 에 '7일 이내' + '월·수·금' 명시",
     "0일 ~ 7일 이내" in body and "월·수·금" in body)
 chk("STR-04: monday body 에 '조회수 5만~300만' + '업로드 0~7일'",

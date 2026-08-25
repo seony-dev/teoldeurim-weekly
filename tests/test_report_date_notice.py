@@ -190,29 +190,38 @@ os.environ.pop("REISSUE", None)
 
 # ═══════════════════════════════════════════════════════════════════
 # 4) _friday_body_html — notice 삽입 확인
+#    (2026-08-24) Weekly 파트 제거 → 시그니처 (date_slug, bm_count, notice_html="")
 # ═══════════════════════════════════════════════════════════════════
 notice_block = send_report._notice_html(real_notice)
 
 # notice 있음
-body_with = send_report._friday_body_html("2026-07-17", 5, 3, True, notice_html=notice_block)
+body_with = send_report._friday_body_html("2026-07-17", 3, notice_html=notice_block)
 chk("FB-01: friday body 에 notice 삽입 (정상 케이스)",
     "border-left" in body_with and "본 리포트는 7월 17일" in body_with)
 chk("FB-02: notice 는 상단(첫 <p> 앞)에 위치",
     body_with.index("border-left") < body_with.index("<p>안녕하세요"))
 
 # notice 없음
-body_without = send_report._friday_body_html("2026-07-20", 5, 3, True, notice_html="")
+body_without = send_report._friday_body_html("2026-07-20", 3, notice_html="")
 chk("FB-03: notice 없으면 안내 박스 미노출",
     "border-left" not in body_without and "발송 안내" not in body_without)
 
-# benchmark 실패 케이스에도 notice 적용
-body_bmfail = send_report._friday_body_html("2026-07-17", 5, 0, False, notice_html=notice_block)
-chk("FB-04: benchmark 실패 fallback 에도 notice 적용",
-    "border-left" in body_bmfail and "본 리포트는 7월 17일" in body_bmfail)
+# 0건 fallback (bm_count=0) 에도 notice 적용
+body_zero = send_report._friday_body_html("2026-07-17", 0, notice_html=notice_block)
+chk("FB-04: bm_count=0 케이스에도 notice 적용",
+    "border-left" in body_zero and "본 리포트는 7월 17일" in body_zero)
+
+# 구 weekly.py 산출물 (YouTube 검색어 기반) 문구 잔존 없는지
+# (2026-08-25) Weekly Bundle 도입으로 "Weekly" 단어 자체는 mail body 에 나올 수 있음.
+# 검증 대상: 이전 weekly.py 유산 표현 ("YouTube 검색어", "Weekly 후보 …건" 형식) 뿐.
+chk("FB-05: friday body 에 구 weekly.py 유산 문구 잔존 없음",
+    "YouTube 검색어" not in body_with and "Weekly 후보 " not in body_with,
+    f"snippet={body_with[:400]}")
 
 
 # ═══════════════════════════════════════════════════════════════════
 # 5) _monday_body_html — notice 미적용 확인 (signature 자체가 안 받음)
+#    (2026-08-24) Weekly 파트 제거 → 시그니처 (date_slug, bm_count)
 # ═══════════════════════════════════════════════════════════════════
 import inspect
 monday_sig = inspect.signature(send_report._monday_body_html)
@@ -220,12 +229,15 @@ chk("MB-01: _monday_body_html 은 notice_html 파라미터 없음",
     "notice_html" not in monday_sig.parameters)
 
 # 실제 렌더 결과에도 안내 흔적 없음
-body_mon = send_report._monday_body_html("2026-07-20", 5, 3, True, True)
+body_mon = send_report._monday_body_html("2026-07-20", 3)
 chk("MB-02: monday 본문에 안내 박스 없음",
     "border-left" not in body_mon
     and "발송 안내" not in body_mon
     and "재발송" not in body_mon
     and "[재발송]" not in body_mon)
+chk("MB-03: monday 본문에 구 weekly.py 유산 문구 잔존 없음",
+    "YouTube 검색어" not in body_mon and "Weekly 후보 " not in body_mon,
+    f"snippet={body_mon[:400]}")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -314,22 +326,23 @@ for bad in ["2026-13-01", "not-a-date", "2026/07/17"]:
 
 # ═══════════════════════════════════════════════════════════════════
 # 9) 통합 subject 조합 — [재발송] prefix + REPORT_DATE
+#    (2026-08-24) Weekly 파트 제거 → "Weekly N + Benchmark M" → "Benchmark N건"
 # ═══════════════════════════════════════════════════════════════════
 os.environ["REISSUE"] = "1"
 os.environ["REPORT_DATE"] = "2026-07-17"
 
 date_slug_s = send_report._now_date_slug()
-subject_normal = f"[털어드림 격주 후보] {date_slug_s} · Weekly 5 + Benchmark 3"
+subject_normal = f"[털어드림 격주 후보] {date_slug_s} · Benchmark 3건"
 subject_final = send_report._reissue_prefix() + subject_normal
-chk("SUB-01: [재발송] 접두어 + slot 날짜 subject",
-    subject_final == "[재발송] [털어드림 격주 후보] 2026-07-17 · Weekly 5 + Benchmark 3",
+chk("SUB-01: [재발송] 접두어 + slot 날짜 subject (Benchmark 전용)",
+    subject_final == "[재발송] [털어드림 격주 후보] 2026-07-17 · Benchmark 3건",
     f"got={subject_final!r}")
 
 # 재발송 아닐 때
 os.environ.pop("REISSUE", None)
 subject_no_reissue = send_report._reissue_prefix() + subject_normal
 chk("SUB-02: reissue 없으면 prefix 없음",
-    subject_no_reissue == "[털어드림 격주 후보] 2026-07-17 · Weekly 5 + Benchmark 3")
+    subject_no_reissue == "[털어드림 격주 후보] 2026-07-17 · Benchmark 3건")
 
 os.environ.pop("REPORT_DATE", None)
 

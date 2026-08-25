@@ -221,14 +221,15 @@ def apify_collect(token, channels, max_per_channel, sort_by):
 
     비동기로 실행한 뒤 상태를 폴링하고, 완료되면 데이터셋 아이템을 반환.
     """
-    actor_path = CFG["APIFY_ACTOR"].replace("/", "~")
+    actor_id = CFG.get("APIFY_DISCOVERY_ACTOR") or CFG.get("APIFY_ACTOR")
+    actor_path = actor_id.replace("/", "~")
     run_input = {
         "channels": channels,
         "maxResultsShorts": max_per_channel,
         "sortChannelShortsBy": sort_by,
     }
 
-    print(f"  [Apify] 액터 실행: {CFG['APIFY_ACTOR']}")
+    print(f"  [Apify] 액터 실행: {actor_id}")
     print(f"  [Apify] 채널 {len(channels)}개 / 채널당 최대 {max_per_channel}개 / 정렬 {sort_by}")
 
     start_url = f"https://api.apify.com/v2/acts/{actor_path}/runs?token={quote(token)}"
@@ -258,6 +259,142 @@ def apify_collect(token, channels, max_per_channel, sort_by):
     items = items or []
     print(f"  [Apify] 수집 아이템: {len(items)}개")
     return items
+
+
+def apify_enrich_titles(token, video_urls, timeout_sec=600):
+    """streamers/youtube-scraper 액터로 video 단위 원본 title 을 조회.
+
+    반환: {video_id: {"title_original": str, "title_translated": str|None}}
+    실패 시 조용히 fallback — 개별 항목은 dict 에서 빠지며, 호출자가 warning 처리.
+
+    상세:
+      · discovery actor 의 title 은 YouTube 자동 번역본일 수 있어 신뢰 불가.
+      · youtube-scraper 는 영상 단위로 `title` (원본) 및 `translatedTitle` 을 반환.
+      · 이 함수는 최대 timeout_sec 동안 폴링하고, 성공 시 dataset 을 읽는다.
+      · video_urls 는 중복 제거 후 넘겨야 한다 (호출량 절감은 caller 책임).
+    """
+    result = {}
+    if not video_urls:
+        return result
+    actor_id = CFG.get("APIFY_DETAIL_ACTOR", "streamers/youtube-scraper")
+    actor_path = actor_id.replace("/", "~")
+    # youtube-scraper 는 startUrls 배열을 받는다.
+    run_input = {
+        "startUrls": [{"url": u} for u in video_urls],
+        # 아이템별 downloadSubtitles/comment 등은 필요 없음 (title/desc 만).
+        "maxResults": len(video_urls),
+    }
+    print(f"  [Apify title enrich] 액터 실행: {actor_id} · {len(video_urls)}개 영상")
+    start_url = f"https://api.apify.com/v2/acts/{actor_path}/runs?token={quote(token)}"
+    try:
+        run = http_json(start_url, data=run_input, method="POST", timeout=60)["data"]
+    except Exception as e:
+        print(f"  ⚠️ title enrich 시작 실패 — 원본 title 확보 불가 (fallback: discovery title): {e}")
+        return result
+    run_id = run["id"]
+    deadline = time.time() + timeout_sec
+    status = run.get("status", "")
+    while time.time() < deadline:
+        time.sleep(10)
+        try:
+            status_url = f"https://api.apify.com/v2/actor-runs/{run_id}?token={quote(token)}"
+            run = http_json(status_url, timeout=60)["data"]
+        except Exception as e:
+            print(f"  ⚠️ title enrich 폴링 실패: {e}")
+            continue
+        status = run.get("status", "")
+        if status in ("SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT", "TIMING-OUT"):
+            break
+    if status != "SUCCEEDED":
+        print(f"  ⚠️ title enrich 액터가 정상 종료 안 함 (상태: {status}) — 원본 title 확보 실패")
+        return result
+    dataset_id = run["defaultDatasetId"]
+    items_url = (f"https://api.apify.com/v2/datasets/{dataset_id}/items"
+                 f"?token={quote(token)}&format=json&clean=true")
+    try:
+        items = http_json(items_url, timeout=120) or []
+    except Exception as e:
+        print(f"  ⚠️ title enrich dataset 읽기 실패: {e}")
+        return result
+    for it in items:
+        # youtube-scraper 스키마: id / url / title / translatedTitle
+        vid = it.get("id") or it.get("videoId") or ""
+        if not vid:
+            # url 에서 fallback 추출. shorts/{id}, watch?v={id}, /v/{id} 만 매치
+            # (단순 `/` alternative 는 `/shorts` 자체가 잡히는 문제로 제거)
+            u = it.get("url") or ""
+            m = re.search(r"(?:shorts/|watch\?v=|/v/)([A-Za-z0-9_-]{6,})", u)
+            if m:
+                vid = m.group(1)
+        if not vid:
+            continue
+        result[vid] = {
+            "title_original": it.get("title") or "",
+            "title_translated": it.get("translatedTitle") or None,
+        }
+    print(f"  [Apify title enrich] {len(result)}/{len(video_urls)}개 원본 title 확보")
+    return result
+
+
+def enrich_video_titles_in_place(token, videos):
+    """videos 리스트의 원본 title 을 in-place 보강.
+
+    호출 전 videos 는 대상 확정 리스트 (to_analyze ∪ HTML 표시 대상). 여기서는
+    video_id 기준 dedup 하여 실제 Apify 호출량을 최소화한다.
+
+    각 video 에 아래 필드가 부착된다:
+      v["title_original"]    : 원본 (한국어 등) — Claude / HTML 에 사용
+      v["title_translated"]  : 번역본 (있으면), 없으면 None
+      v["title"]             : title_original 으로 덮어씀 (기존 코드 backward compat)
+      v["title_discovery"]   : discovery actor 가 준 원본값 (fallback 확인용)
+
+    enrichment 실패 시 title 은 discovery 값 유지 + warning 로그.
+
+    반환: {"targets": int, "enriched": int, "fallback": int}
+    """
+    if not videos:
+        return {"targets": 0, "enriched": 0, "fallback": 0}
+    # video_id 기준 dedup — 같은 영상이 to_analyze 와 HTML 표시 대상에 동시 포함 가능
+    seen = {}
+    for v in videos:
+        vid = v.get("video_id")
+        if not vid or vid in seen:
+            continue
+        seen[vid] = v
+    # url 확보 (없으면 shorts/<id> 로 조립)
+    url_map = {}
+    for vid, v in seen.items():
+        u = (v.get("url") or "").strip()
+        if not u:
+            u = f"https://www.youtube.com/shorts/{vid}"
+        url_map[vid] = u
+    urls = list(url_map.values())
+    enriched = apify_enrich_titles(token, urls)
+    # in-place 반영
+    ok, fail = 0, 0
+    for v in videos:
+        vid = v.get("video_id")
+        if not vid:
+            continue
+        # discovery 원본값 보존 (fallback 진단용)
+        if "title_discovery" not in v:
+            v["title_discovery"] = v.get("title", "")
+        rec = enriched.get(vid)
+        if rec and rec.get("title_original"):
+            v["title_original"] = rec["title_original"]
+            v["title_translated"] = rec.get("title_translated")
+            # Claude / HTML 모두 이 값을 사용하도록 title 자체를 갱신
+            v["title"] = rec["title_original"]
+            ok += 1
+        else:
+            # 실패 — discovery title 을 원본으로 취급하되 명시적 fallback 표기
+            v["title_original"] = v.get("title", "")
+            v["title_translated"] = None
+            v["title_enrich_fallback"] = True
+            fail += 1
+    if fail:
+        print(f"  ⚠️ title enrich fallback: {fail}개 영상은 discovery title 을 그대로 사용합니다 (원본 여부 미확정)")
+    return {"targets": len(seen), "enriched": ok, "fallback": fail}
 
 
 def normalize_video(item):
@@ -397,56 +534,53 @@ def validate_reference_channels(refs):
 
 
 # ============================================================================
-# history 기반 자동 참고 채널 추출 (읽기 전용)
+# sent history 로드 (target-namespaced + legacy backward-compat)
+# ----------------------------------------------------------------------------
+# (2026-08-25 리팩터링) AUTO_REFERENCE_FROM_HISTORY 관련 자동 참고 채널 확장 로직
+# 은 사용자 지시로 완전히 제거되었습니다. 아래 loader 는 오직 sent dedup 용으로만
+# history 를 읽습니다.
 # ============================================================================
-def load_history_records():
-    """history/*.json을 읽어 주차별 레코드와 발송 영상 ID 집합을 반환.
+def _load_legacy_weekly_history_sent_ids():
+    """(털어드림 legacy) history/*.json 에서 발송된 candidates 의 video_id 집합.
 
-    ⚠️ 읽기 전용 — history 파일을 절대 수정/삭제하지 않는다.
-    반환: (weeks, sent_video_ids)
-      weeks         = [{"file", "candidates":[...], "hard_passed":[...]}, ...]
-      sent_video_ids = weekly가 실제 발송한 영상(candidates) ID 집합
+    이 파일들은 weekly.py 유산으로, 물리적으로 이동/삭제하지 않고 dedup 참조용으로만
+    읽는다. 묘한덕질/짤덕방 등 신규 target 은 이 함수를 호출하지 않는다.
     """
-    weeks, sent_ids = [], set()
+    result = set()
     if not HISTORY_DIR.exists():
-        return weeks, sent_ids
+        return result
     for f in sorted(HISTORY_DIR.glob("*.json")):
         try:
             d = json.loads(f.read_text(encoding="utf-8"))
         except Exception as e:
-            print(f"  ⚠️ history 읽기 실패 {f.name}: {e}")
+            print(f"  ⚠️ legacy weekly history 읽기 실패 {f.name}: {e}")
             continue
-        candidates = d.get("candidates") or []
-        rl = d.get("report_lists") or {}
-        hard_passed = rl.get("hard_passed") or []
-        for it in candidates:
+        for it in (d.get("candidates") or []):
             vid = it.get("video_id")
             if vid:
-                sent_ids.add(vid)
-        weeks.append({"file": f.name, "candidates": candidates,
-                      "hard_passed": hard_passed})
-    return weeks, sent_ids
+                result.add(vid)
+    return result
 
 
-def load_benchmark_sent_history():
-    """benchmark/history/sent/*.json을 읽어 이전 benchmark 리포트(recent/standard)에서
-    발송된 영상 id 집합을 반환.
+def _load_flat_benchmark_sent_ids():
+    """(털어드림 legacy) benchmark/history/sent/YYYY-MM-DD_{recent,standard}.json.
 
-    orchestrator(send_report.py)가 실제 메일 발송 성공 후에만 이 디렉터리에 파일을 쓴다.
-    → 발송 실패한 실행의 후보는 여기 없음 → 다음 실행에서 정상적으로 다시 후보로 검토됨.
-
-    weekly history와 완전 분리 — 이 함수는 weekly history를 참조하지 않음.
-    weekly history의 sent_ids는 별도로 load_history_records()가 담당.
+    2026-08-25 리팩터링 이전에 저장된 flat 파일들. 신규 저장은
+    benchmark/history/sent/{target}/YYYY-MM-DD_{mode}.json 로 이루어지지만,
+    털어드림의 과거 발송 dedup 을 유지하기 위해 flat 파일들도 함께 읽는다.
     """
     result = set()
     root_dir = ROOT / benchmark_config.BENCHMARK_SENT_HISTORY_DIR
     if not root_dir.exists():
         return result
+    _flat_pat = re.compile(r"^\d{4}-\d{2}-\d{2}_(standard|recent)\.json$")
     for f in sorted(root_dir.glob("*.json")):
+        if not _flat_pat.match(f.name):
+            continue
         try:
             d = json.loads(f.read_text(encoding="utf-8"))
         except Exception as e:
-            print(f"  ⚠️ benchmark sent history 읽기 실패 {f.name}: {e}")
+            print(f"  ⚠️ legacy flat benchmark sent 읽기 실패 {f.name}: {e}")
             continue
         for vid in (d.get("candidates_video_ids") or []):
             if vid:
@@ -454,71 +588,46 @@ def load_benchmark_sent_history():
     return result
 
 
-def _accumulate_channel(scores, item, weight, week_file):
-    """channel_id 기준으로 채널 점수를 누적."""
-    cid = (item.get("channel_id") or "").strip()
-    if not cid:
-        return  # channel_id 없으면 안정적 식별 불가 → 스킵
-    name = (item.get("channel") or "").strip()
-    s = scores.setdefault(cid, {"name": name, "score": 0,
-                                "weeks": set(), "videos": 0})
-    if name:
-        s["name"] = name  # 최신 채널명으로 갱신
-    s["score"] += weight
-    s["weeks"].add(week_file)
-    s["videos"] += 1
+def _load_namespaced_sent_ids(target_slug):
+    """benchmark/history/sent/{target_slug}/*.json 발송 영상 id 집합.
 
-
-def extract_reference_channels_from_history(weeks):
-    """history 주차 레코드에서 참고 채널을 빈도순으로 추출.
-
-    candidates(최종 채택)는 가중치 높게, hard_passed(통과 풀)는 낮게 집계.
-    제외 채널은 결과에서 빼고, 최소 점수 미만은 컷한 뒤 상위 N개 반환.
+    신규 저장은 이 namespace 에만 쓴다. 묘한덕질/짤덕방/털어드림 각각 자신의
+    namespace 파일만 참조.
     """
-    excl_names = {n.strip().lower() for n in CFG.get("EXCLUDE_CHANNELS", set()) if n.strip()}
-    excl_ids = {i.strip() for i in CFG.get("EXCLUDE_CHANNEL_IDS", set()) if i.strip()}
-    cw = CFG["HISTORY_CANDIDATE_WEIGHT"]
-    hw = CFG["HISTORY_HARDPASS_WEIGHT"]
-
-    scores = {}
-    for wk in weeks:
-        cand_vids = {it.get("video_id") for it in wk["candidates"] if it.get("video_id")}
-        for it in wk["candidates"]:
-            _accumulate_channel(scores, it, cw, wk["file"])
-        for it in wk["hard_passed"]:
-            # 같은 영상이 candidates에도 있으면 중복 집계 방지
-            if it.get("video_id") in cand_vids:
-                continue
-            _accumulate_channel(scores, it, hw, wk["file"])
-
-    # 제외 채널 제거 + 최소 점수 컷
-    ranked = []
-    for cid, info in scores.items():
-        if cid in excl_ids:
+    result = set()
+    ns_dir = ROOT / benchmark_config.BENCHMARK_SENT_HISTORY_DIR / target_slug
+    if not ns_dir.exists():
+        return result
+    for f in sorted(ns_dir.glob("*.json")):
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"  ⚠️ namespaced sent history 읽기 실패 {target_slug}/{f.name}: {e}")
             continue
-        if info["name"].strip().lower() in excl_names:
-            continue
-        if info["score"] < CFG["AUTO_REFERENCE_MIN_SCORE"]:
-            continue
-        ranked.append((cid, info))
+        for vid in (d.get("candidates_video_ids") or []):
+            if vid:
+                result.add(vid)
+    return result
 
-    # 점수 → 등장 주차 수 순 정렬, 상위 N개
-    ranked.sort(key=lambda x: (x[1]["score"], len(x[1]["weeks"]), x[1]["videos"]),
-                reverse=True)
-    ranked = ranked[:CFG["AUTO_REFERENCE_TOP_N"]]
 
-    channels = []
-    for cid, info in ranked:
-        channels.append({
-            "name": info["name"] or "(채널명 미상)",
-            "channel": f"https://www.youtube.com/channel/{cid}",
-            "_auto": True,
-            "_channel_id": cid,
-            "_score": info["score"],
-            "_weeks": len(info["weeks"]),
-            "_videos": info["videos"],
-        })
-    return channels
+def load_sent_video_ids_for_target(target):
+    """target 별 sent dedup 소스 통합.
+
+    · 신규 namespaced sent history 는 항상 읽는다.
+    · 털어드림 target 만 legacy 소스 (flat + weekly history) 도 함께 읽는다.
+      (target.legacy_sent_history_flat / legacy_weekly_history 플래그)
+
+    반환: (namespaced_ids, legacy_flat_ids, legacy_weekly_ids, merged_ids)
+    """
+    ns = _load_namespaced_sent_ids(target["slug"])
+    legacy_flat = set()
+    legacy_weekly = set()
+    if target.get("legacy_sent_history_flat"):
+        legacy_flat = _load_flat_benchmark_sent_ids()
+    if target.get("legacy_weekly_history"):
+        legacy_weekly = _load_legacy_weekly_history_sent_ids()
+    merged = ns | legacy_flat | legacy_weekly
+    return ns, legacy_flat, legacy_weekly, merged
 
 
 def _channel_key(s):
@@ -526,72 +635,39 @@ def _channel_key(s):
     return re.sub(r"[^a-z0-9]", "", str(s).lower())
 
 
-def build_reference_channels():
-    """수동 지정 + history 자동 추출을 합쳐 최종 참고 채널 목록을 만든다.
+def build_reference_channels(target):
+    """target profile 의 reference_channels 를 검증 후 반환.
 
-    처리 순서:
-      1. 수동 채널(REFERENCE_CHANNELS) — 제외 채널 섞이면 즉시 중단
-      2. history 자동 추출 → auto_discovered_reference_candidates
-      3. 자동 추출분 제외 검증 한 번 더 (드롭 + 경고)
-      4. 병합 — channel_id 기준 중복 제거, 수동 우선
+    (2026-08-25 리팩터링) 이전 AUTO_REFERENCE_FROM_HISTORY 자동 추출 병합은
+    제거되었습니다. reference_channels 는 target profile 의 명시적 목록 100%.
 
-    반환: dict {
-      "manual": [...],
-      "auto_discovered_reference_candidates": [...],
-      "merged": [...],
-      "sent_video_ids": set,
-    }
+    처리:
+      1. target.reference_channels 를 dict 복사 (_auto=False)
+      2. 제외 채널 (우리 채널·blocklist) 이 섞여 있으면 즉시 중단
+      3. dedup (channel_id / channel URL 기준)
+
+    반환:
+      {"manual": [...], "merged": [...]}   # backward compat 를 위해 manual/merged 둘 다.
     """
-    # 1. 수동 채널 — 제외 검증 (사용자 실수 → 중단)
-    manual = [dict(r) for r in CFG.get("REFERENCE_CHANNELS", [])]
-    for r in manual:
-        r.setdefault("_auto", False)
+    manual = []
+    for r in target.get("reference_channels", []):
+        d = dict(r)
+        d.setdefault("_auto", False)
+        manual.append(d)
     validate_manual_channels(manual)
 
-    # 2~3. history 자동 추출 + 재검증
-    auto_discovered_reference_candidates, sent_ids = [], set()
-    if CFG.get("AUTO_REFERENCE_FROM_HISTORY"):
-        weeks, sent_ids = load_history_records()
-        auto_discovered_reference_candidates = extract_reference_channels_from_history(weeks)
-        print(f"  history {len(weeks)}주차 → 자동 추출 후보 "
-              f"{len(auto_discovered_reference_candidates)}개 "
-              f"(발송 영상 {len(sent_ids)}개 식별)")
-        # Apify 수집 대상에 들어가기 전 제외 검증 한 번 더
-        before = len(auto_discovered_reference_candidates)
-        auto_discovered_reference_candidates = purge_excluded_channels(
-            auto_discovered_reference_candidates, "자동추출")
-        if len(auto_discovered_reference_candidates) != before:
-            print(f"  자동 추출 채널 재검증: {before}개 → "
-                  f"{len(auto_discovered_reference_candidates)}개")
-
-    # 4. 병합 — channel_id 주 기준 중복 제거, 수동 우선
     merged, seen_ids, seen_keys = [], set(), set()
     for ref in manual:
-        merged.append(ref)
-        cid = ref_channel_id(ref)
-        if cid:
-            seen_ids.add(cid)
-        seen_keys.add(_channel_key(ref.get("channel", "")))
-    dup = 0
-    for ref in auto_discovered_reference_candidates:
         cid = ref_channel_id(ref)
         ckey = _channel_key(ref.get("channel", ""))
         if (cid and cid in seen_ids) or (ckey and ckey in seen_keys):
-            dup += 1
             continue
         merged.append(ref)
         if cid:
             seen_ids.add(cid)
         seen_keys.add(ckey)
-    if dup:
-        print(f"  수동/자동 channel_id 중복 {dup}개 제거")
 
-    return {
-        "manual": manual,
-        "auto_discovered_reference_candidates": auto_discovered_reference_candidates,
-        "merged": merged,
-        "sent_video_ids": sent_ids,
-    }
+    return {"manual": manual, "merged": merged}
 
 
 def filter_excluded_channels(videos):
@@ -626,23 +702,30 @@ def hard_filter(videos, now):
     업로드 age는 실제 published_at UTC timestamp 기준 (초 단위) — 정수 days_since_upload
     는 리포트 표시용이며, 여기 필터 판정에는 사용하지 않는다.
 
-    - recent (MIN_AGE_DAYS_EXCLUSIVE=None, UPLOADED_WITHIN_DAYS=30):
-        pub >= now - 30일 통과 (정확히 30일도 통과)
-    - standard (MIN_AGE_DAYS_EXCLUSIVE=30, UPLOADED_WITHIN_DAYS=365):
-        pub < now - 30일 AND pub >= now - 365일 통과 (정확히 30일은 컷)
+    조회수:
+      · MIN_VIEWS 는 inclusive lower (views >= MIN 통과, views < MIN 컷)
+      · MAX_VIEWS 는 apply_max_views_filter 에서 별도 처리 (여기 판정 아님)
+    길이:
+      · MIN_DURATION_SEC 이상 통과 (< MIN 컷). 15 라면 정확히 15초 PASS.
+      · MAX_DURATION_SEC = None 이면 상한 미적용. 값이 있으면 <= MAX PASS, > MAX FAIL.
+    업로드:
+      · Weekly (MIN_AGE_DAYS_EXCLUSIVE=None, UPLOADED_WITHIN_DAYS=7):
+          pub >= now - 7d 통과 (정확히 7d 도 통과)
+      · Standard (MIN_AGE_DAYS_EXCLUSIVE=30, UPLOADED_WITHIN_DAYS=365):
+          pub < now - 30d AND pub >= now - 365d 통과 (exact 30d 컷 / exact 365d 통과)
     """
     min_views = CFG["MIN_VIEWS"]
-    max_dur = CFG["MAX_DURATION_SEC"]
-    min_dur = CFG.get("MIN_DURATION_SEC", 0)   # 26.07.15: 15초 미만 초단타 컷
-    age_min = CFG.get("MIN_AGE_DAYS_EXCLUSIVE")   # None 또는 30
-    age_max = CFG.get("UPLOADED_WITHIN_DAYS")     # 30 또는 365
+    max_dur = CFG.get("MAX_DURATION_SEC")          # None 이면 상한 미적용
+    min_dur = CFG.get("MIN_DURATION_SEC", 0)
+    age_min = CFG.get("MIN_AGE_DAYS_EXCLUSIVE")    # None 또는 30
+    age_max = CFG.get("UPLOADED_WITHIN_DAYS")      # 7 또는 365
 
     passed, excluded = [], []
     for v in videos:
         if v["views"] < min_views:
             excluded.append((v, f"조회수 부족 ({v['views']:,})"))
             continue
-        # duration_sec 파싱 실패 시 0 (normalize_video 반환값) → min_dur=15면 여기서 컷.
+        # duration_sec 파싱 실패 시 0 (normalize_video 반환값) → min_dur>0 이면 여기서 컷.
         # 사유를 명확히 구분 (0초 = 파싱 실패, 그 외 = 실제 초단타).
         _d = v.get("duration_sec", 0)
         if min_dur > 0 and _d < min_dur:
@@ -651,7 +734,7 @@ def hard_filter(videos, now):
             else:
                 excluded.append((v, f"길이 {min_dur}초 미만 ({_d}초)"))
             continue
-        if _d > max_dur:
+        if max_dur is not None and _d > max_dur:
             excluded.append((v, f"길이 초과 ({_d}초)"))
             continue
         # timestamp 기반 age 판정 (source of truth)
@@ -660,7 +743,7 @@ def hard_filter(videos, now):
             excluded.append((v, "업로드 시간 파싱 실패 (age_parse)"))
             continue
         if age_min is not None and pub >= now - timedelta(days=age_min):
-            # strict >= 컷 → 정확히 age_min일 = 컷 (standard에서 30일은 recent 소속)
+            # strict >= 컷 → 정확히 age_min일 = 컷
             excluded.append((v, f"업로드 {age_min}일 이내 (범위 밖)"))
             continue
         if age_max is not None and pub < now - timedelta(days=age_max):
@@ -740,90 +823,11 @@ def compute_metrics(v, now):
 
 # ============================================================================
 # Claude 분석
+# ----------------------------------------------------------------------------
+# 시스템 프롬프트는 target profile 의 identity.analyze_video_system_prompt 에서 로드.
+# 하드코딩된 BENCHMARK_SYSTEM_PROMPT 상수는 target profile 이관과 함께 제거되었음.
+# (털어드림 원본 프롬프트는 config/targets/teoldeurim.py 에 그대로 보존)
 # ============================================================================
-BENCHMARK_SYSTEM_PROMPT = """당신은 K-pop Shorts 채널 '털어드림'의 벤치마크 큐레이터입니다.
-타 채널의 인기 Shorts를 보고, 털어드림에 후보로 쓸 만한지 평가하고 기획 포인트를 뽑습니다.
-
-# 채널 정체성
-
-'털어드림'은 K-pop 연예인 중심의 이슈·비하인드·관계성 분석형 Shorts 채널입니다.
-단순 가십이나 장면 전달이 아니라, 인물의 행동·감정·관계·산업 구조 속에서
-"왜 이런 장면이 나왔는지, 어떤 맥락이 있는지, 무엇이 반복 소비되는지"를 분석적으로 다룹니다.
-
-핵심 공식 — 시의성 지연:
-  1차(이슈 자체) → 2차(반응 정리·해석형) → 3차(여론 분석·산업 영향)
-이슈 직후 단순 보도가 아닌, 2차/3차 해석으로 재가공해 시간이 지나도 유효한
-구조적 분석을 추구합니다. 휘발성 콘텐츠 ❌, 반복 가능한 구조적 콘텐츠 ✅.
-
-# 8가지 핵심 소재 유형
-
-털어드림에 직접 사용할 후보는 아래 8가지 유형 중 하나에 명확히 속하는 것을 우선합니다.
-다만 벤치마크 목적에서는 8가지 유형에 완전히 속하지 않더라도,
-재사용 가능한 훅·제목 구조·관계성·페르소나·팬덤 반응 구조가 있으면 참고 가치가 있다고 판단할 수 있습니다.
-
-1. K-pop 산업 분석: 계약·경제·정책·소속사 시스템
-2. 아이돌 뒷이야기: 녹음실·촬영장·연습실 비하인드
-3. 아이돌 일상 상황극: 실물 vs 무대, 기대 vs 현실 갭
-4. 뮤직비디오 비하인드: 위험 촬영, NG 장면, 메이킹 디테일
-5. 아이돌 고충 분석: 수면·다이어트·스케줄·건강·심리
-6. **관계성·계보 분석**: 선배 → 후배 영향, 그룹 간 계보, 멤버 간 관계,
-   팬-아이돌 상호작용에서 반복되는 관계 패턴
-7. 실력/논란 해설: 안무·라이브·인성 논란의 구조적 이유
-8. 연습생/데뷔 비하인드: 회사 결정·트레이닝 시스템·데뷔 과정
-
-# 5가지 훅 패턴 (성공 영상의 첫 3초 구조)
-
-1. 비교형: 과거 vs 현재 / 기대 vs 현실 / 선배 vs 후배
-2. 의외성형: 충격적 사실, 위험한 상황, 예상 밖 폭로
-3. 극한상황형: 수치·극단 강조 (72시간, 5년의 연습생, 죽기 살기)
-4. 설명형: 기술·경제·구조적 배경을 분석적으로 해부
-5. 유머형: 자조적 유머, 놀라운 장면, 위트 있는 표현
-
-# 1군 아이돌 정의
-
-대형/중대형 기획사 소속 + 대중 인지도 높은 현역 그룹의 멤버 또는 그룹 자체:
-- HYBE: BTS, NewJeans/NJZ, TXT, ENHYPEN, ILLIT, LE SSERAFIM, SEVENTEEN, &TEAM
-- SM: aespa, RIIZE, NCT(127/Dream/WayV), Red Velvet, Hearts2Hearts
-- YG: BLACKPINK, BABYMONSTER, TREASURE
-- JYP: TWICE, ITZY, NMIXX, Stray Kids
-- 기타: IVE, (G)I-DLE, MAMAMOO, ATEEZ, TWS, KISS OF LIFE, BOYNEXTDOOR,
-  fromis_9, ZEROBASEONE, RESCENE
-- 솔로로 트렌드 1군 진입: (아이즈원 출신) 최예나, 권은비, 조유리, (우주소녀 출신) 다영
-무명·소형 기획사·트로트·해외 K-pop은 1군 외.
-
-동명이인 주의: 한국 아이돌 이름은 동명이인이 흔합니다(다영/지수/유나/하니 등).
-메타데이터만으로 인물 식별이 100% 확실하지 않으면 1군 그룹 멤버 가능성을 우선
-고려하고 "(추정)"으로 표시하세요.
-
-# 좋은 후보 / 나쁜 후보 신호
-
-좋은 직접 후보: 1군 인물 직접 등장, 의문형/부정형 제목, 시의성 낮고 반복 가능,
-  8개 소재 유형에 명확히 속함, 분석 각도 존재, 한국어 제목.
-
-나쁜 후보: 영어 제목, 직캠/뮤비/무대 본방 그 자체, 특정 시점에만 의미가 있는 휘발성 가십,
-  콘텐츠의 주인공이 무명 아이돌·일반 유튜버 중심인 경우, 자극·낚시 톤,
-  분석 각도와 재사용 가능한 기획 포인트가 모두 없음.
-
-단순 짤·밈·리액션·모음형이라는 이유만으로 자동 탈락시키지 않습니다.
-반복 가능한 제목 구조, 강한 훅, 멤버 페르소나, 관계성, 팬덤 반응 구조 등
-털어드림식으로 변형 가능한 기획 포인트가 있다면 벤치마크 가치가 있는 것으로 판단합니다.
-
-지시받은 출력 형식(JSON)을 정확히 따르세요. JSON 외 텍스트는 출력하지 마세요.
-
-# 벤치마크 평가 원칙
-
-벤치마크에서는 "털어드림에 그대로 사용할 수 있는가"와
-"소재·훅·구성 방식을 털어드림식으로 변형할 가치가 있는가"를 구분해서 판단합니다.
-
-단순 밈·리액션·모음형 콘텐츠라도,
-반복 가능한 제목 구조, 강한 첫 3초 훅, 멤버 페르소나,
-관계성, 팬덤 반응 구조 등 재사용 가능한 기획 포인트가 명확하면
-벤치마크 가치는 있다고 판단할 수 있습니다.
-
-단, weekly 실제 후보 선정 기준은 별개이며,
-벤치마크 가치가 있다고 해서 실제 후보로 자동 채택되는 것은 아닙니다.
-"""
-
 VIDEO_SCHEMA = {
     "type": "object",
     "properties": {
@@ -839,13 +843,31 @@ VIDEO_SCHEMA = {
         "hook_type": {"type": "string"},
         "idol_tier": {"type": "string"},
         "risk": {"type": "string"},
-        "teoldeurim_angle": {"type": "string"},
+        # (2026-08-25 리팩터링) target 무관 필드로 통일. 이 값은 각 target 의
+        # angle_field_label 로 HTML 에 표시된다. legacy filtered_raw 는 여전히
+        # `teoldeurim_angle` 을 쓰지만, 읽을 때 두 필드 모두 지원.
+        "target_angle": {"type": "string"},
     },
     "required": ["fit_score", "recommend", "fit_reason",
                  "benchmark_value_score", "benchmark_value_reason",
-                 "topic_type", "hook_type", "idol_tier", "risk", "teoldeurim_angle"],
+                 "topic_type", "hook_type", "idol_tier", "risk", "target_angle"],
     "additionalProperties": False,
 }
+
+
+def _target_angle(analysis):
+    """analysis dict 에서 target_angle 을 읽되 legacy `teoldeurim_angle` 도 fallback.
+
+    · 신규 분석 결과는 `target_angle` 필드에 저장.
+    · 기존 filtered_raw / benchmark sent json 에는 `teoldeurim_angle` 만 존재 —
+      backward compat 를 위해 그 값도 함께 확인.
+    """
+    if not isinstance(analysis, dict):
+        return ""
+    v = analysis.get("target_angle")
+    if v:
+        return v
+    return analysis.get("teoldeurim_angle") or ""
 
 PATTERN_SCHEMA = {
     "type": "object",
@@ -934,13 +956,49 @@ def _add_usage(total, u):
         total[k] += u[k]
 
 
-def analyze_video(client, v):
-    """단일 영상 — 털어드림 적합도 평가."""
+def _soft_guidance_block(target):
+    """target.soft_guidance → user prompt 에 삽입될 텍스트 블록.
+
+    positive_signals / negative_signals 는 실험 가설 / soft signal 로만 취급하도록
+    명시. Hard rule 로 승격하지 말라는 요구사항 반영.
+    """
+    sg = target.get("soft_guidance") or {}
+    pos = list(sg.get("positive_signals") or [])
+    neg = list(sg.get("negative_signals") or [])
+    if not pos and not neg:
+        return ""
+    lines = [
+        "\n### 소프트 시그널 (참고용 — Hard rule 이 아니라 실험 가설/상관 관찰)",
+        "아래 항목은 표본상 상관관계이며 인과가 확정되지 않았습니다. Hard 컷 기준이 아닌",
+        "scoring 참고 신호로만 활용하세요. 자동 채택/거부 판단으로 사용하지 마세요.",
+    ]
+    if pos:
+        lines.append("- 긍정 신호(성과 관찰):")
+        lines += [f"    · {s}" for s in pos]
+    if neg:
+        lines.append("- 부정 신호(관찰상 약세):")
+        lines += [f"    · {s}" for s in neg]
+    return "\n".join(lines) + "\n"
+
+
+def analyze_video(client, v, target):
+    """단일 영상 — target 채널 관점에서 적합도 · 벤치마크 가치 평가.
+
+    target: config/targets/{slug}.py 의 TARGET dict. identity 에서
+    system prompt / anchor 문안 / angle 지시를 모두 로드한다.
+    """
+    identity = target["identity"]
+    system_prompt = identity["analyze_video_system_prompt"]
+    intro = identity["analyze_video_user_prompt_intro"]
+    anchor_high = identity["analyze_video_anchor_high"]
+    angle_line = identity["analyze_video_user_prompt_angle"]
+
     hts = " ".join(v.get("hashtags") or [])[:200]
     days = v.get("days_since_upload")
     days_str = f"{days}일 전" if days is not None else "(업로드일 불명)"
+    soft_block = _soft_guidance_block(target)
     user_msg = (
-        "다음 YouTube Shorts가 '털어드림' 채널에서 다룰 만한 후보인지 평가하세요.\n\n"
+        f"{intro}\n\n"
         f"제목: {v['title']}\n"
         f"채널: {v['channel_name']}\n"
         f"조회수: {v['views']:,}\n"
@@ -952,10 +1010,11 @@ def analyze_video(client, v):
         f"업로드: {v['published_at'][:10]} ({days_str})\n"
         f"해시태그: {hts}\n"
         f"URL: {v['url']}\n\n"
+        f"{soft_block}"
         "## 출력할 JSON 필드 (두 점수를 독립적으로 평가)\n\n"
         "### 축 A — 직접 후보 적합도\n"
-        "- fit_score: 0~100 정수. 이 영상을 털어드림 채널에 직접 후보로 가져와\n"
-        "  2차/3차 분석형 콘텐츠로 변형하기 좋은가? (8소재·5훅·1군 인물 기준)\n"
+        "- fit_score: 0~100 정수. 이 영상을 우리 채널에 직접 후보로 가져와\n"
+        "  적합한 형태로 변형·활용하기 좋은가? (채널 identity 기준)\n"
         "- recommend: boolean. fit_score 60 이상이고 채널 톤에 맞으면 true\n"
         "- fit_reason: 왜 쓸 만한지(또는 아닌지) 1~2문장, 한국어\n\n"
         "### 축 B — 벤치마크 가치 (fit_score와 독립. 상관관계 강제 X)\n"
@@ -965,7 +1024,7 @@ def analyze_video(client, v):
         "  Anchor:\n"
         "    0~29:  재사용 가능한 훅·구조·페르소나·관계성 포인트가 거의 없음\n"
         "    30~59: 일부 참고 요소는 있으나 일반적이거나 재사용성이 제한적\n"
-        "    60~79: 털어드림식으로 변형 가능한 훅·제목 구조·관계성·페르소나 포인트가 명확\n"
+        f"    60~79: {anchor_high}\n"
         "    80~100: 직접 후보 적합도와 무관하게 매우 강한 벤치마크 가치.\n"
         "            반복 가능한 포맷·캐릭터성·팬덤 반응 구조 등 뚜렷한 재사용 요소\n"
         "- benchmark_value_reason: 구체적으로 무엇을 재사용 가능한지 명시.\n"
@@ -982,15 +1041,16 @@ def analyze_video(client, v):
         "    · 컴필레이션 방식 (모음 구조)\n"
         "    · 감정 서사 (어떤 감정 흐름)\n\n"
         "### 공통 메타\n"
-        "- topic_type: 8개 소재 유형 중 하나 + 등장 인물/그룹 괄호 부기\n"
-        "- hook_type: 5개 훅 패턴 중 하나\n"
+        "- topic_type: 채널 identity 상 소재 유형 중 하나 + 등장 인물/그룹 괄호 부기\n"
+        "- hook_type: 훅 패턴 중 하나\n"
         "- idol_tier: '1군' / '(추정) 1군' / '1군 외' 중 하나\n"
         "- risk: 동명이인·민감소재·저작권 등 주의점 (없으면 '없음')\n"
-        "- teoldeurim_angle: 털어드림식 2차/3차 해석으로 어떻게 변형할지 한 줄\n"
+        f"{angle_line}\n"
     )
     try:
         resp = client.messages.create(
-            model=CFG["ANALYSIS_MODEL"],
+            model=CFG.get("ANALYSIS_MODEL")
+                  or benchmark_config.BENCHMARK_CONFIG["ANALYSIS_MODEL_DEFAULT"],
             max_tokens=2048,
             thinking={"type": "adaptive"},
             output_config={
@@ -999,7 +1059,7 @@ def analyze_video(client, v):
             },
             system=[{
                 "type": "text",
-                "text": BENCHMARK_SYSTEM_PROMPT,
+                "text": system_prompt,
                 "cache_control": {"type": "ephemeral"},
             }],
             messages=[{"role": "user", "content": user_msg}],
@@ -1023,18 +1083,21 @@ def analyze_video(client, v):
             "hook_type": "",
             "idol_tier": "",
             "risk": "분석 실패",
-            "teoldeurim_angle": "",
+            "target_angle": "",
         }, {"input": 0, "cache_write": 0, "cache_read": 0, "out": 0}
 
 
-def analyze_patterns(client, candidates):
-    """3섹션 패턴 분석 — 직접 공통 / 벤치마크형 공통 / 채널별 인사이트.
+def analyze_patterns(client, candidates, target):
+    """3섹션 패턴 분석 — target 관점에서 direct/benchmark/채널별 인사이트 도출.
 
     candidates는 pattern_input(video_id unique 처리 완료된 리스트).
-    두 축(direct_final + benchmark_final) 합쳐서 unique 처리한 표본을 기반으로
-    3섹션 각각 생성. 채널별 sample_size 명시. 표본 부족 시 반드시 note에 명시.
-    근거 없는 추측 금지.
     """
+    identity = target["identity"]
+    system_prompt = identity["analyze_video_system_prompt"]
+    pattern_lead = identity["pattern_user_lead"]
+    direct_label = identity["pattern_direct_label"]
+    angle_label = identity["angle_field_label"]
+
     # 채널별 sample_size 사전 계산 (프롬프트에 명시하여 표본 부족 안전장치)
     from collections import Counter
     channel_counts = Counter(v.get("channel_name", "?") for v in candidates)
@@ -1054,10 +1117,10 @@ def analyze_patterns(client, candidates):
             f"댓글률 {fmt_pct(v['comment_rate'])} · 길이 {v['duration_sec']}초\n"
             f"   fit 이유: {a.get('fit_reason', '')}\n"
             f"   bv 이유: {a.get('benchmark_value_reason', '')}\n"
-            f"   변형 각도: {a.get('teoldeurim_angle', '')}"
+            f"   변형 각도: {_target_angle(a)}"
         )
     user_msg = (
-        "아래는 '털어드림' 벤치마크 분석 대상으로 선별된 타 채널 인기 Shorts입니다.\n"
+        f"{pattern_lead}\n"
         "(direct_final + benchmark_final 두 축의 합집합, video_id 기준 unique 처리됨)\n\n"
         "## 표본 개요\n"
         f"총 표본: {len(candidates)}개\n"
@@ -1067,7 +1130,7 @@ def analyze_patterns(client, candidates):
         + "\n\n".join(lines)
         + "\n\n## 출력할 JSON 필드 (3섹션)\n\n"
         "### A. direct_common_patterns (2~5개)\n"
-        "털어드림 직접 활용도가 높은 영상(fit_score 높은 후보)들의 공통 구조.\n"
+        f"{direct_label}\n"
         "각 항목 {label, detail}. 제목 구조·훅·소재·반응 측면.\n\n"
         "### B. benchmark_common_patterns (2~5개)\n"
         "직접 적합도와 무관하게 훅·페르소나·관계성·팬덤 반응·유머·감정 서사 등에서 "
@@ -1087,10 +1150,12 @@ def analyze_patterns(client, candidates):
         "2. per_channel_insights는 sample_size가 실제 표본 수와 정확히 일치해야 함.\n"
         "3. 표본 3개 미만 채널은 반드시 note에 부족 명시. insights를 억지로 채우지 말 것.\n"
         "4. 채널명은 위 표본 개요의 채널명과 정확히 일치시킬 것.\n"
+        f"5. '변형 각도' 라벨은 이 target 에서 '{angle_label}' 을 의미합니다.\n"
     )
     try:
         resp = client.messages.create(
-            model=CFG["ANALYSIS_MODEL"],
+            model=CFG.get("ANALYSIS_MODEL")
+                  or benchmark_config.BENCHMARK_CONFIG["ANALYSIS_MODEL_DEFAULT"],
             max_tokens=6144,
             thinking={"type": "adaptive"},
             output_config={
@@ -1099,7 +1164,7 @@ def analyze_patterns(client, candidates):
             },
             system=[{
                 "type": "text",
-                "text": BENCHMARK_SYSTEM_PROMPT,
+                "text": system_prompt,
                 "cache_control": {"type": "ephemeral"},
             }],
             messages=[{"role": "user", "content": user_msg}],
@@ -1299,14 +1364,13 @@ def _fit_class(score):
     return "lo"
 
 
-def _render_candidate(rank, v, mode="direct"):
+def _render_candidate(rank, v, mode="direct", angle_label="변형 각도"):
     """카드 렌더 — mode에 따라 primary 점수와 primary 사유가 달라짐.
 
     mode="direct":    fit_score badge primary, fit_reason 강조
     mode="benchmark": benchmark_value_score badge primary, benchmark_value_reason 강조
-
-    26.07.14 정책 변경: direct_final과 benchmark_final은 상호 배타적 (dedup 후 승격).
-    이전의 "다른 리스트에도 선정됨" dup badge는 더 이상 발생하지 않아 제거.
+    angle_label: target profile 의 identity.angle_field_label. 예)
+        "털어드림식 변형 각도" / "묘한덕질식 활용 각도" / "짤덕방식 활용 각도"
     """
     a = v.get("analysis", {})
     fit_score = a.get("fit_score", 0)
@@ -1366,12 +1430,15 @@ def _render_candidate(rank, v, mode="direct"):
         <span class="t">{esc_html(a.get('idol_tier',''))}</span>
         {risk_tag}
       </div>
-      <div class="angle"><b>▸ 털어드림식 변형 각도</b><br>{esc_html(a.get('teoldeurim_angle',''))}</div>
+      <div class="angle"><b>▸ {esc_html(angle_label)}</b><br>{esc_html(_target_angle(a))}</div>
     </div>
   </div>"""
 
 
-# 탭 정의: (key, label, title_template, desc). Standard 기존 문구를 원본으로 유지.
+# 탭 정의: (key, label, title_template, desc).
+# Standard/legacy 기존 문구 (target=teoldeurim 관점) 를 원본으로 유지.
+# 다른 target 은 direct_final desc 안의 "털어드림" 문구가 자동 치환되지 않으므로
+# render_report 안에서 display_name 기반으로 치환한다.
 # Recent 는 아래 _RECENT_TAB_DESC_OVERRIDE 로 render_report 안에서 pdesc 만 교체.
 _BENCHMARK_STAGE_TABS = [
     ("collected",          "수집 전체",
@@ -1393,7 +1460,7 @@ _BENCHMARK_STAGE_TABS = [
      "history에서 발견된 weekly 발송 이력 — 분석은 했지만 후보 리스트에서 제외됨."),
     ("direct_final",       "직접 후보 TOP {n}",
      "직접 후보 TOP {n}",
-     "털어드림에 그대로 또는 2차/3차 해석으로 변형해 활용하기 좋은 후보 "
+     "{TARGET}에 그대로 또는 재해석해 활용하기 좋은 후보 "
      "(fit_score 상위, 기발송 제외)."),
     ("benchmark_final",    "벤치마크 가치 TOP {n}",
      "벤치마크 가치 TOP {n}",
@@ -1490,21 +1557,20 @@ def _render_si_row(rank, v):
     )
 
 
-def _render_stage_body(key, items):
+def _render_stage_body(key, items, angle_label="변형 각도"):
     """탭 패널 본문 — direct_final/benchmark_final은 카드, 그 외는 컴팩트 리스트.
 
     각 행은 모두 렌더링하되, JS가 INITIAL=30개만 표시하고 나머지는 숨김.
     '더보기' 버튼 클릭 시 STEP=50개씩 추가 노출 (weekly.py 패턴).
-
-    26.07.14 정책 변경: direct_final과 benchmark_final은 상호 배타적 (dedup 후 승격)
-    이라 dup 참고 badge 로직 제거됨.
+    angle_label: target profile 의 identity.angle_field_label. direct/benchmark 카드
+    안의 "▸ 활용 각도" 부분 label 로 사용.
     """
     if not items:
         return '<div class="empty">해당 단계의 영상이 없습니다.</div>'
     if key in ("direct_final", "benchmark_final", "final"):
         mode = "benchmark" if key == "benchmark_final" else "direct"
         return "".join(
-            _render_candidate(i, v, mode=mode)
+            _render_candidate(i, v, mode=mode, angle_label=angle_label)
             for i, v in enumerate(items, 1)
         )
     rows = "".join(_render_si_row(i, v) for i, v in enumerate(items, 1))
@@ -1512,7 +1578,7 @@ def _render_stage_body(key, items):
 
 
 def render_report(stage_data, patterns, today_label, ref_channels, config_used,
-                  profile="standard"):
+                  profile="standard", target=None):
     """탭 UI 형태의 벤치마크 리포트 HTML 생성.
 
     stage_data: dict
@@ -1520,9 +1586,23 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used,
       "analyzed", "sent_excluded", "final" 각각의 영상 리스트
     config_used: filter 기준 표시용 config 스냅샷 (filtered_raw JSON 에도 그대로 저장됨.
       Standard 의 JSON 구조 보존을 위해 profile 은 이 dict 가 아닌 별도 인자로 받는다.)
-    profile:  "standard" | "recent". "recent" 일 때 analyzed / sent_excluded 탭 설명이
+    profile:  "standard" | "recent" (backward compat). "recent" 일 때 analyzed / sent_excluded 탭 설명이
       _RECENT_TAB_DESC_OVERRIDE 문구로 교체된다. 기본 "standard" = 원본 문구 유지.
+    target:   config/targets/{slug}.py 의 TARGET dict. display_name / identity 를 참조해
+      HTML title, H1, footer, direct_final desc 를 target 별로 렌더한다.
+      None 이면 legacy 재렌더 목적 — 털어드림 문구를 기본값으로 사용.
     """
+    # target profile 기본값 (legacy 재렌더 대응). 실제 실행에서는 항상 target 이 넘어옴.
+    if target is None:
+        # 지연 import (circular 회피)
+        import sys as _sys
+        _t_path = str(ROOT / "config")
+        if _t_path not in _sys.path:
+            _sys.path.insert(0, _t_path)
+        from targets import get_target as _get_target
+        target = _get_target("teoldeurim")
+    display_name = target.get("display_name") or "털어드림"
+    angle_label = target.get("identity", {}).get("angle_field_label") or "변형 각도"
     ref_bits = []
     for r in ref_channels:
         mark = " <span style='color:#f5c518'>(자동)</span>" if r.get("_auto") else ""
@@ -1565,6 +1645,9 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used,
         # Standard 는 override 를 적용하지 않아 backward compat 완전 보존.
         if _profile_for_desc == "recent" and key in _RECENT_TAB_DESC_OVERRIDE:
             pdesc = _RECENT_TAB_DESC_OVERRIDE[key]
+        # target display_name placeholder 치환 (direct_final desc).
+        if "{TARGET}" in pdesc:
+            pdesc = pdesc.replace("{TARGET}", display_name)
         items = stage_data.get(key, []) or []
         n = len(items)
         primary = " primary" if key == "direct_final" else ""
@@ -1578,7 +1661,7 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used,
             f'</button>'
         )
         ptitle = ptitle_tmpl.format(n=n, max_views_label=max_views_label)
-        body = _render_stage_body(key, items)
+        body = _render_stage_body(key, items, angle_label=angle_label)
         hidden = "" if key == default_stage else " is-hidden"
         # 더보기 버튼 — JS가 초기 30개 초과분에 대해 동적으로 노출/숨김 처리
         more_btn = '<button class="more-btn is-hidden" type="button">더보기</button>'
@@ -1683,13 +1766,13 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used,
 <html lang="ko"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <base target="_blank">
-<title>털어드림 · 타 채널 벤치마크 리포트 {today_label}</title>
+<title>{esc_html(display_name)} · 타 채널 벤치마크 리포트 {today_label}</title>
 <style>{REPORT_CSS}</style>
 </head><body><div class="page bm-root" data-report="benchmark">
   <section class="hero">
     <div class="eyebrow">Competitor Benchmark Report · {today_label}</div>
-    <h1>털어드림 <em>타 채널 벤치마크</em><br>참고 후보 & 기획 포인트</h1>
-    <p>외부 참고 채널의 인기 Shorts를 수집해 털어드림에 쓸 만한 후보를 골라
+    <h1>{esc_html(display_name)} <em>타 채널 벤치마크</em><br>참고 후보 & 기획 포인트</h1>
+    <p>외부 참고 채널의 인기 Shorts를 수집해 {esc_html(display_name)}에 쓸 만한 후보를 골라
        순위를 매기고, 공통 패턴에서 기획 포인트를 뽑았습니다.<br>
        <b style="color:#fff">참고 채널:</b> {ref_names or "(없음)"}
        <span class="js-only"><br><b style="color:#f5c518">▸ 상단 카드를 클릭하면 단계별 영상 리스트를 볼 수 있습니다.</b></span></p>
@@ -1733,7 +1816,7 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used,
 
   <h3 class="pat-section-h">A. 직접 후보 공통 패턴</h3>
   <p class="pat-section-desc">
-    털어드림 직접 활용도가 높은 영상(fit_score 상위)의 공통 구조.
+    {esc_html(display_name)} 직접 활용도가 높은 영상(fit_score 상위)의 공통 구조.
   </p>
   {direct_pat_html}
 
@@ -1751,7 +1834,7 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used,
   {channel_html}
 
   <div class="footer">
-    <span>털어드림 · 타 채널 벤치마크 모듈 (보조)</span>
+    <span>{esc_html(display_name)} · 타 채널 벤치마크 모듈</span>
     <span>Apify · Claude Opus 4.7 · {today_label} KST</span>
   </div>
 </div>
@@ -1895,19 +1978,50 @@ def main():
     else:
         today_label = now_kst.strftime("%Y-%m-%d")
 
-    # PROFILE env 반영 (default = "standard")
-    profile = (os.environ.get("PROFILE") or "standard").strip().lower()
-    profile_cfg = benchmark_config.resolve_config(profile)
+    # TARGET / MODE env 반영. backward compat: PROFILE=recent|standard 이 오면
+    # target=teoldeurim + mode=weekly|standard 로 자동 매핑.
+    _target_env = (os.environ.get("TARGET") or "").strip().lower()
+    _mode_env = (os.environ.get("MODE") or "").strip().lower()
+    _profile_env = (os.environ.get("PROFILE") or "").strip().lower()
+    # 지연 import (config/targets 는 sys.path 조작 후)
+    _cfg_dir = str(ROOT / "config")
+    if _cfg_dir not in sys.path:
+        sys.path.insert(0, _cfg_dir)
+    from targets import resolve_mode as _resolve_mode, get_target as _get_target
+    if _target_env:
+        target_slug = _target_env
+        mode = _mode_env or ("weekly" if _profile_env == "recent"
+                             else _profile_env or "weekly")
+    else:
+        # PROFILE-only 실행 (legacy) → teoldeurim 로 매핑
+        target_slug = "teoldeurim"
+        if _profile_env in ("recent", ""):
+            mode = "weekly" if _profile_env == "recent" else (_mode_env or "standard")
+        else:
+            mode = _profile_env
+    target = _get_target(target_slug)
+    profile_cfg = _resolve_mode(target_slug, mode)
+    # 공용 config (EXCLUDE_*, EXCLUDE_SENT_FROM_CANDIDATES 등) 도 병합
+    for k, v in benchmark_config.BENCHMARK_CONFIG.items():
+        profile_cfg.setdefault(k, v)
+    # 기존 코드가 참조하는 _PROFILE 도 backward compat 로 남김 (recent/standard 매핑)
+    profile_cfg.setdefault(
+        "_PROFILE",
+        "recent" if (target_slug == "teoldeurim" and mode == "weekly") else mode,
+    )
+    profile = profile_cfg["_PROFILE"]  # legacy 코드 backward compat
     CFG.clear()
     CFG.update(profile_cfg)
 
     print("=" * 60)
-    print("털어드림 타 채널 벤치마크 모듈")
+    print(f"{target['display_name']} 타 채널 벤치마크 모듈")
     print(f"실행 시각 (KST): {now_kst.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"프로파일: {profile}  "
+    print(f"target={target_slug} mode={mode}  "
           f"(SORT_BY={CFG['SORT_BY']}, "
           f"조회수 {CFG['MIN_VIEWS']:,}~{CFG['MAX_VIEWS']:,}, "
-          f"업로드 {CFG['UPLOADED_WITHIN_DAYS']}일)")
+          f"업로드 {CFG['UPLOADED_WITHIN_DAYS']}일, "
+          f"길이 {CFG.get('MIN_DURATION_SEC',0)}~"
+          f"{CFG.get('MAX_DURATION_SEC') or '상한없음'}초)")
     print("=" * 60)
 
     apify_token = os.environ.get("APIFY_TOKEN", "").strip()
@@ -1920,29 +2034,26 @@ def main():
         sys.exit(1)
 
     # ── STEP 0. 참고 채널 구성 + 검증 ──
-    print("\n[STEP 0] 참고 채널 구성 (수동 + history 자동 추출)")
-    refs = build_reference_channels()
+    print("\n[STEP 0] 참고 채널 구성 (target profile 명시 목록)")
+    refs = build_reference_channels(target)
     manual_channels = refs["manual"]
-    auto_discovered_reference_candidates = refs["auto_discovered_reference_candidates"]
     ref_channels = refs["merged"]
-    weekly_sent_ids = refs["sent_video_ids"]  # weekly history read-only
-    print(f"  수동 {len(manual_channels)}개 + 자동 "
-          f"{len(auto_discovered_reference_candidates)}개 → 병합 {len(ref_channels)}개")
+    print(f"  참고 채널 {len(ref_channels)}개 로드")
     for r in ref_channels:
-        tag = "자동" if r.get("_auto") else "수동"
-        extra = (f" (점수 {r.get('_score')}, {r.get('_weeks')}주 등장)"
-                 if r.get("_auto") else "")
-        print(f"   [{tag}] {r.get('name', '?')}{extra}")
+        print(f"   [수동] {r.get('name', '?')}")
     # Apify 수집 직전 최종 검증
     validate_reference_channels(ref_channels)
 
-    # benchmark 공용 sent history 로드 (recent + standard 통합 dedup)
-    # → orchestrator(send_report.py)가 발송 성공 후에만 이 디렉터리에 파일을 쓴다.
-    benchmark_sent_ids = load_benchmark_sent_history()
-    # 최종 dedup 대상 = weekly history ∪ benchmark 공용 sent history
-    sent_video_ids = weekly_sent_ids | benchmark_sent_ids
-    print(f"  기발송 dedup: weekly {len(weekly_sent_ids)}개 "
-          f"+ benchmark {len(benchmark_sent_ids)}개 → 합집합 {len(sent_video_ids)}개")
+    # sent history 로드 — target namespaced + legacy backward-compat
+    ns_ids, legacy_flat_ids, legacy_weekly_ids, sent_video_ids = \
+        load_sent_video_ids_for_target(target)
+    print(f"  기발송 dedup ({target_slug}): "
+          f"namespaced {len(ns_ids)}개"
+          + (f" + legacy flat {len(legacy_flat_ids)}개"
+             if target.get('legacy_sent_history_flat') else "")
+          + (f" + weekly history {len(legacy_weekly_ids)}개"
+             if target.get('legacy_weekly_history') else "")
+          + f" → 합집합 {len(sent_video_ids)}개")
 
     # ── STEP 1. Apify 수집 ──
     print("\n[STEP 1] Apify로 참고 채널 인기 Shorts 수집")
@@ -2049,17 +2160,26 @@ def main():
 
     # 파일명에 profile 포함 — 같은 날 recent/standard 동시 실행 시 충돌 방지
     _profile_slug = CFG.get("_PROFILE", "standard")
-    raw_path = BENCHMARK_DIR / f"{today_label}_{_profile_slug}_filtered_raw.json"
+    # target=teoldeurim 은 기존 파일명 유지 (backward compat).
+    # 그 외 target 은 {target}_{profile} 로 별도 저장.
+    if target_slug == "teoldeurim":
+        raw_path = BENCHMARK_DIR / f"{today_label}_{_profile_slug}_filtered_raw.json"
+    else:
+        raw_path = BENCHMARK_DIR / f"{today_label}_{target_slug}_{_profile_slug}_filtered_raw.json"
 
     def _save_filtered_raw(stages_dict):
-        """filtered_raw.json 저장 — 항상 benchmark/ 디렉토리에만 쓴다."""
+        """filtered_raw.json 저장 — 항상 benchmark/ 디렉토리에만 쓴다.
+
+        (2026-08-25 리팩터링) AUTO_REFERENCE_FROM_HISTORY 제거로
+        auto_discovered_reference_candidates 필드도 삭제. manual 만 저장.
+        """
         raw_path.write_text(
             json.dumps({
                 "generated_at": now_kst.isoformat(),
+                "target": target_slug,
+                "mode": _profile_slug,
                 "reference_channels": {
                     "manual": manual_channels,
-                    "auto_discovered_reference_candidates":
-                        auto_discovered_reference_candidates,
                     "merged_used": ref_channels,
                 },
                 "config_snapshot": config_snapshot,
@@ -2096,16 +2216,15 @@ def main():
     # Claude 분석 대상: 조회수 상위 N개
     passed.sort(key=lambda v: v["views"], reverse=True)
 
-    # ── STEP 5.5. Recent 프로파일: Claude 분석 전 기발송 dedup (2026-08-14 대표님 요청) ──
-    # Recent 만 순서 변경: 상위 N 슬롯을 신규 영상으로 꽉 채워 다양성 확보.
-    # Standard 는 기존 순서 유지 (Claude 분석 후 dedup) — Standard 최종 결과 보존.
-    # profile 분기는 명시적 값 비교로만 처리 (공통화·리팩토링 회피, backward compat 우선).
-    _profile_slug = CFG.get("_PROFILE", "standard")
+    # ── STEP 5.5. Weekly 모드 (PRE_ANALYSIS_DEDUP=True): Claude 분석 전 기발송 dedup ──
+    # Weekly mode 는 상위 N 슬롯을 신규 영상으로 꽉 채워 다양성 확보.
+    # Standard mode 는 기존 순서 유지 (Claude 분석 후 dedup) — 최종 결과 보존.
+    _pre_dedup_flag = bool(CFG.get("PRE_ANALYSIS_DEDUP"))
     _exclude_sent = CFG.get("EXCLUDE_SENT_FROM_CANDIDATES", True)
-    _recent_pre_dedup = (_profile_slug == "recent" and _exclude_sent)
-    sent_excluded_list = []  # 두 profile 모두에서 사용, 채우는 시점만 다름
+    _recent_pre_dedup = (_pre_dedup_flag and _exclude_sent)
+    sent_excluded_list = []  # 두 mode 모두에서 사용, 채우는 시점만 다름
     if _recent_pre_dedup:
-        print(f"\n[STEP 5.5] Recent 기발송 dedup (Claude 분석 전 제외)")
+        print(f"\n[STEP 5.5] 기발송 dedup (Claude 분석 전 제외)")
         _fresh_passed, sent_excluded_list = apply_sent_dedup_pre_analysis(
             passed, sent_video_ids)
         to_analyze = _fresh_passed[:CFG["MAX_ANALYSIS_CANDIDATES"]]
@@ -2114,6 +2233,19 @@ def main():
     else:
         # Standard: 기존 동작 (sent 여부 무관 상위 N)
         to_analyze = passed[:CFG["MAX_ANALYSIS_CANDIDATES"]]
+
+    # ── STEP 5.9. 원본 title enrichment (youtube-scraper) ──
+    # discovery actor 의 title 은 YouTube 자동 번역본일 수 있어 신뢰 불가.
+    # 최종 HTML 에 title 이 노출되는 모든 stage (collected / max_views_excluded /
+    # hard_excluded / analyzed / sent_excluded / direct_final / benchmark_final) 을 대상.
+    # all_collected_pool 은 이 모든 stage 의 union 이고, 각 stage 리스트는 이 pool 의
+    # dict 를 공유 참조하므로 in-place enrichment 한 번이면 모든 카드에 반영된다.
+    # 동일 video_id 는 한 번만 호출 (enrich_video_titles_in_place 내부 dedup).
+    print(f"\n[STEP 5.9] 원본 title enrichment (video-level Apify 호출)")
+    enrich_targets = list(all_collected_pool)   # HTML 에 노출되는 모든 영상
+    enrich_stats = enrich_video_titles_in_place(apify_token, enrich_targets)
+    print(f"  대상 {enrich_stats['targets']}개 (unique) → "
+          f"enriched {enrich_stats['enriched']}개 / fallback {enrich_stats['fallback']}개")
 
     # ── STEP 6. Claude 분석 (영상별 적합도 + 벤치마크 가치, 두 축 독립 평가) ──
     total_usage = {"input": 0, "cache_write": 0, "cache_read": 0, "out": 0}
@@ -2130,7 +2262,7 @@ def main():
         print(f"\n[STEP 6] Claude 분석 — {len(to_analyze)}개 영상 (fit + benchmark_value 두 축)")
         client = anthropic.Anthropic(api_key=anthropic_key)
         for i, v in enumerate(to_analyze, 1):
-            analysis, usage = analyze_video(client, v)
+            analysis, usage = analyze_video(client, v, target)
             v["analysis"] = analysis
             _add_usage(total_usage, usage)
             print(f"  [{i}/{len(to_analyze)}] {v['title'][:30]}... "
@@ -2206,7 +2338,7 @@ def main():
 
         # ── STEP 7. Claude 분석 (공통 패턴 + 기획 포인트) ──
         print(f"\n[STEP 7] Claude 분석 — 공통 패턴 & 기획 포인트 도출")
-        patterns, p_usage = analyze_patterns(client, pattern_input)
+        patterns, p_usage = analyze_patterns(client, pattern_input, target)
         _add_usage(total_usage, p_usage)
         print(f"  직접 후보 공통 패턴 {len(patterns.get('direct_common_patterns', []))}개 / "
               f"벤치마크형 공통 패턴 {len(patterns.get('benchmark_common_patterns', []))}개 / "
@@ -2235,9 +2367,15 @@ def main():
 
     html = render_report(stage_data, patterns, today_label, ref_channels,
                          config_snapshot,
-                         profile=CFG.get("_PROFILE", "standard"))
-    # 파일명에 profile 포함 — 같은 날 recent/standard 동시 실행 시 충돌 방지
-    report_path = BENCHMARK_DIR / f"{today_label}_{_profile_slug}_report.html"
+                         profile=CFG.get("_PROFILE", "standard"),
+                         target=target)
+    # 파일명에 target/profile 포함 — 같은 날 여러 target·mode 동시 실행 시 충돌 방지.
+    # target=teoldeurim 은 backward compat 로 profile slug 만 사용 (기존 파일명 유지),
+    # 그 외 target 은 {target}_{profile} 로 저장.
+    if target_slug == "teoldeurim":
+        report_path = BENCHMARK_DIR / f"{today_label}_{_profile_slug}_report.html"
+    else:
+        report_path = BENCHMARK_DIR / f"{today_label}_{target_slug}_{_profile_slug}_report.html"
     report_path.write_text(html, encoding="utf-8")
     print(f"  📄 리포트 저장: {report_path}")
 

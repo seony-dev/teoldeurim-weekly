@@ -1,88 +1,25 @@
 # -*- coding: utf-8 -*-
-"""
-털어드림 타 채널 벤치마크 모듈 설정.
+"""공용 벤치마크 config — target 무관 항목만 담습니다.
 
-이 파일은 weekly.py와 완전히 독립적이다.
-- weekly.py를 import 하지 않는다 (1차 구현 안전 우선).
-- 제외 채널(우리 채널 + 기존 blocklist)은 여기에 직접 명시한다.
-- 나중에 공통 config로 분리하는 건 2차 리팩토링으로 미룬다.
+target 별 REFERENCE_CHANNELS / identity / modes / prompts 는
+`config/targets/{slug}.py` 로 이관되었습니다 (2026-08-25 리팩터링).
+
+이 파일은 다음 3가지 카테고리로 축소되었습니다:
+  1) 우리 채널 (5개) + blocklist — 어떤 target 이든 참조 채널로 넣으면 안 됨
+  2) Apify actor 및 공통 옵션
+  3) benchmark 공용 sent history 위치
+
+backward compat:
+  · `resolve_config(profile)` 함수는 남겨두지만 내부적으로 target=teoldeurim 을
+    로드하도록 리다이렉트. profile="standard"/"recent" 만 인식.
+  · `AUTO_REFERENCE_FROM_HISTORY` 등 자동 참고 채널 확장 로직은 사용자 지시로
+    완전히 제거했습니다 (모든 target 은 profile 의 명시적 목록으로만 관리).
 """
 
 BENCHMARK_CONFIG = {
     # ========================================================================
-    # 벤치마크 대상 — 외부 참고 채널 (여기 등록된 채널만 수집)
-    # ------------------------------------------------------------------------
-    # name    : 사람이 알아보는 라벨 (리포트 표기용)
-    # channel : Apify 액터에 넘길 값. 채널 username(@ 없이) 또는 채널 URL.
-    #           예) "rainbowicecream9780"
-    #               "https://www.youtube.com/@somechannel"
-    #
-    # ⚠️ 여기에 우리 채널이나 EXCLUDE 목록의 채널을 넣으면
-    #    실행 시작 시 검증에서 즉시 중단된다.
-    # ========================================================================
-    "REFERENCE_CHANNELS": [
-        # 형식: {"name": "라벨", "channel": "username 또는 채널 URL"}
-        {"name": "패션탐정냥", "channel": "https://www.youtube.com/@tamjeongcat"},
-        {"name": "덕칼럼", "channel": "https://www.youtube.com/channel/UC0l_Io9P2rTbM82PoC9Bi4w"},
-        {"name": "이센느", "channel": "https://www.youtube.com/@이센느"},
-        {"name": "리센느서치P", "channel": "https://www.youtube.com/@리센느서치P"},
-        # 2026-08-05 대표님 요청 추가
-        {"name": "베몽몬", "channel": "https://www.youtube.com/@baemongmon"},
-        {"name": "팝픽", "channel": "https://www.youtube.com/@PopPickkk"},
-        {"name": "로로단", "channel": "https://www.youtube.com/@로로단"},
-        # 2026-08-06 대표님 요청 추가
-        {"name": "방탄소년(진)", "channel": "https://www.youtube.com/@방탄소년진"},
-        # 2026-08-19 대표님 요청 추가
-        {"name": "빈빵", "channel": "https://www.youtube.com/@bin_ppang"},
-        {"name": "최강정", "channel": "https://www.youtube.com/channel/UC1S7dqM64csgijABH0jtq2A"},
-        # 2026-08-20 대표님 요청 추가 — 팬덤별 (투바투/세븐틴/보넥도) 참고 채널
-        {"name": "우뽀삐", "channel": "https://www.youtube.com/@우뽀삐"},
-        {"name": "수빈이의 숲", "channel": "https://www.youtube.com/@수빈이의숲"},
-        {"name": "샌드위치", "channel": "https://www.youtube.com/@beomgyuprolover"},
-        {"name": "다섯별처럼", "channel": "https://www.youtube.com/@다섯별처럼"},
-        {"name": "윤너정", "channel": "https://www.youtube.com/channel/UCeeEjvHE2Ah1IUhgdQNFOGg"},
-        {"name": "밍귤", "channel": "https://www.youtube.com/@mikang97"},
-        {"name": "도도혜혜", "channel": "https://www.youtube.com/@도도혜혜"},
-        {"name": "짱캐럿", "channel": "https://www.youtube.com/@jjangCARAT"},
-        {"name": "운순둥", "channel": "https://www.youtube.com/@운순둥"},
-        {"name": "넥자업고튀어", "channel": "https://www.youtube.com/@넥자업고튀어"},
-        {"name": "한문빌라주인", "channel": "https://www.youtube.com/@한문빌라주인"},
-        {"name": "또보넥", "channel": "https://www.youtube.com/@또보넥"},
-    ],
-
-    # ========================================================================
-    # 자동 참고 채널 추출 — history/*.json (읽기 전용)에서 채널을 뽑아낸다.
-    # ------------------------------------------------------------------------
-    # weekly.py가 매주 골라낸 후보들의 채널 = "털어드림에 맞는 영상을 올리는 채널".
-    # 그 채널들을 빈도순으로 집계해 상위 N개를 참고 채널로 자동 추가한다.
-    # 최종 사용 = REFERENCE_CHANNELS(수동) + 자동 추출분 (중복 제거).
-    #
-    # ⚠️ history/*.json은 읽기만 한다 — 수정/삭제하지 않는다.
-    #    weekly.py를 import 하지도 않는다.
-    # ========================================================================
-    "AUTO_REFERENCE_FROM_HISTORY": True,
-    "AUTO_REFERENCE_TOP_N": 0,          # [임시] 이번 실행은 수동 채널만 — 검증 후 12로 복원
-                                        # (=0이어도 sent_video_ids dedup은 유지됨)
-    "AUTO_REFERENCE_MIN_SCORE": 2,      # 이 점수 미만 채널은 제외 (1회성 채널 컷)
-    "HISTORY_CANDIDATE_WEIGHT": 3,      # 최종 채택(candidates) 등장 시 영상당 가중치
-    "HISTORY_HARDPASS_WEIGHT": 1,       # Hard 통과(hard_passed) 등장 시 영상당 가중치
-
-    # 이미 weekly에서 발송한 영상(history candidates)은 후보 리스트에서 제외.
-    #
-    # 실제 활용 위치 (2026-08-14 코드 기준):
-    #   · direct_final / benchmark_final 후보 리스트에서 제외
-    #   · sent_excluded 탭 표시
-    # 활용 안 되는 위치:
-    #   · 패턴 분석 (analyze_patterns) 입력은 direct_final + benchmark_final 합집합만.
-    #     기발송 영상은 패턴 분석에 들어가지 않음.
-    # profile 별 dedup 적용 시점:
-    #   · Recent: STEP 5.5 (Claude 분석 전) — 분석 슬롯이 신규 영상으로 꽉 채워짐.
-    #   · Standard: STEP 6 (Claude 분석 후) — 기존 동작 유지, 최종 결과 보존.
-    "EXCLUDE_SENT_FROM_CANDIDATES": True,
-
-    # ========================================================================
-    # 제외 채널 — 수집 / 분석 / 저장 / 리포트 어디에도 포함되면 안 되는 채널
-    # (우리 채널 5개 + 기존 blocklist). weekly.py에서 import 하지 않고 직접 명시.
+    # 제외 채널 — 어느 target 이 되었든 절대 참고 채널로 삼거나 후보에 포함되면 안 됨.
+    # 우리 채널 5개 + blocklist.
     # ========================================================================
     "EXCLUDE_CHANNELS": {
         "SOONIGROUP [수니그룹]",
@@ -106,119 +43,67 @@ BENCHMARK_CONFIG = {
     # ========================================================================
     # Apify 액터 설정
     # ========================================================================
-    "APIFY_ACTOR": "streamers/youtube-shorts-scraper",
-    # 정렬: POPULAR(인기순) / NEWEST / OLDEST
-    # ⚠️ 액터 특성상 oldestPostDate를 넘기면 정렬이 NEWEST로 강제 리셋된다.
-    #    그래서 업로드 기간 컷은 액터에 맡기지 않고 수집 후 로컬에서 처리한다.
-    "SORT_BY": "POPULAR",
-    "MAX_SHORTS_PER_CHANNEL": 50,   # 메가급 채널의 4M 이하 후보 확보 위해 상향
-                                    # (이전 15도 패션탐정냥/덕칼럼은 상위 15개가 모두 400만 초과)
-                                    # 8채널 × 50 = 400 items 최대 수집
-    # (2026-08-07: MAX_TOTAL_RAW 상한 완전 제거. 초창기 2채널×15=30 기준의 안전값이었으나
-    #  8채널로 확장하며 후보 다양성을 과도하게 제한하고 있었음. Claude 분석 비용 상한은
-    #  MAX_ANALYSIS_CANDIDATES 로 별도 통제되므로 API 비용 영향 없음.)
-    # 2026-08-21: 대표님 요청으로 참고 채널 10 → 22개 확장. MAX_SHORTS_PER_CHANNEL=50 유지.
+    # 채널 단위 discovery — 참고 채널의 인기/최신 Shorts 를 대량 조회.
+    # 정렬: POPULAR(인기순) / NEWEST / OLDEST — actor 특성상 oldestPostDate 지정 시
+    # NEWEST 로 강제 리셋된다. 업로드 기간 컷은 액터에 맡기지 않고 로컬에서 처리.
+    "APIFY_DISCOVERY_ACTOR": "streamers/youtube-shorts-scraper",
+    # 영상 단위 detail — 원본 title 확보용 (2026-08-25 리팩터링에서 도입).
+    # discovery actor 의 title 은 YouTube 자동 번역본일 수 있어 신뢰 불가.
+    "APIFY_DETAIL_ACTOR": "streamers/youtube-scraper",
+
+    # 이미 발송된 영상(sent history)은 후보 리스트에서 제외.
+    # profile 별 dedup 적용 시점:
+    #   · Weekly (pre_analysis_dedup=True): Claude 분석 전 (분석 슬롯 신규로 채움)
+    #   · Standard (pre_analysis_dedup=False): Claude 분석 후 (기존 동작 유지)
+    "EXCLUDE_SENT_FROM_CANDIDATES": True,
 
     # ========================================================================
-    # Hard 필터 — 수집 후 로컬에서 적용 (Claude 분석 전 1차 컷)
+    # 공통 상수 — target 별 override 불필요
     # ========================================================================
-    "MIN_VIEWS": 500_000,           # [테스트값] 운영 권장 100_000 (10만) → 50만으로 상향 (26.07.14)
-    "MAX_VIEWS": 9_000_000,         # 조회수 상한 400만 → 900만으로 상향 (26.07.14)
-                                    # (초대형 조회수 영상은 너무 뻔해서 후보 제외)
-                                    # Hard 필터 이전에 별도 분리 (리포트 '조회수 초과 제외' 탭)
-    "MAX_DURATION_SEC": 180,        # Shorts 형식 (상한)
-    "MIN_DURATION_SEC": 15,         # 15초 미만 초단타 영상 제외 (26.07.15, 대표님 요청)
-                                    # 최종 길이 조건: 15초 이상 ~ 180초 이하
-    # 업로드 age 필터 — timestamp 기준 (초 단위 정확도). 정수 days_since_upload는 리포트 표시용.
-    #   MIN_AGE_DAYS_EXCLUSIVE: age > N (strict, exclusive lower bound). None이면 하한 없음.
-    #   UPLOADED_WITHIN_DAYS: age <= N (inclusive upper bound). None이면 상한 없음.
-    # standard의 30일 초과~365일 이내를 정확히 표현. 정확히 30일 = recent 소속 (여기서 컷됨).
-    "MIN_AGE_DAYS_EXCLUSIVE": 30,   # standard: 30일 이하 컷 (30 자체 포함해서 컷)
-    "UPLOADED_WITHIN_DAYS": 365,    # 1년 이내 업로드만 (너무 오래된 영상 제외)
-
-    # ========================================================================
-    # Claude 분석 / 최종 후보
-    # ========================================================================
-    "ANALYSIS_MODEL": "claude-opus-4-7",
-    "MAX_ANALYSIS_CANDIDATES": 10,  # [테스트값] 운영 권장 30 — Claude 분석 비용 상한
-    "FINAL_CANDIDATES": 5,          # [테스트값] 운영 권장 15 — 리포트 노출 후보 수
+    "ANALYSIS_MODEL_DEFAULT": "claude-opus-4-7",
 }
 
 
-# ============================================================================
-# 프로파일 — 프로파일별로 override 되는 필드만 명시.
-# 나머지 필드(REFERENCE_CHANNELS, EXCLUDE_*, ANALYSIS_MODEL 등)는
-# BENCHMARK_CONFIG에서 상속.
-# ----------------------------------------------------------------------------
-# PROFILE 환경변수가 지정되지 않으면 "standard" 사용 (기존 격주 금요일 동작).
-#
-# ⚠️ standard 프로파일의 값은 반드시 위 BENCHMARK_CONFIG의 현재 값과 동일해야 함
-#     (backward compat — 기존 실행 결과가 프로파일 도입으로 달라지면 안 됨).
-# ============================================================================
-BENCHMARK_PROFILES = {
-    # 격주 금요일 — 30일 초과 ~ 365일 이내
-    "standard": {
-        "SORT_BY": "POPULAR",
-        "MAX_SHORTS_PER_CHANNEL": 50,
-        "MIN_VIEWS": 500_000,
-        "MAX_VIEWS": 9_000_000,
-        "MAX_DURATION_SEC": 180,
-        "MIN_DURATION_SEC": 15,
-        "MIN_AGE_DAYS_EXCLUSIVE": 30,     # 30일 이하는 recent 소속 → 여기서 컷
-        "UPLOADED_WITHIN_DAYS": 365,      # 365일 초과 컷
-        # 2026-08-21 대표님 요청: 참고 채널 10 → 22개 확장으로 Standard 도 pool 커짐
-        # (365일 window 넓어 원래도 많음, 22채널이면 더 확대). 상위 10만 검토는 좁아
-        # Claude 검토 pool 을 30 으로 확장. FINAL 은 기존 5 유지 (2026-08-21 재확정).
-        # 처리 순서는 기존 유지: Hard → 상위 30 Claude 분석 → 기발송 제외 → 직접/벤치마크.
-        # Recent 처럼 사전 dedup 로 순서 변경하지 않음.
-        "MAX_ANALYSIS_CANDIDATES": 30,
-        "FINAL_CANDIDATES": 5,
-    },
-    # 월·수·금 최근 콘텐츠 통합 리포트용 (0일 ~ 7일).
-    #   2026-07-21 대표님 요청: 주 3회 발송 확장 + MIN_VIEWS 10만 → 5만
-    #   / UPLOADED_WITHIN_DAYS 30일 → 7일 로 축소.
-    "recent": {
-        "SORT_BY": "NEWEST",
-        "MAX_SHORTS_PER_CHANNEL": 50,
-        "MIN_VIEWS": 50_000,
-        "MAX_VIEWS": 3_000_000,
-        "MAX_DURATION_SEC": 180,
-        "MIN_DURATION_SEC": 15,
-        # 업로드 age 범위: 0일 ≤ age ≤ 7일. 정확히 7일 timestamp도 여기 포함.
-        "MIN_AGE_DAYS_EXCLUSIVE": None,   # 하한 없음 (업로드 당일 포함)
-        "UPLOADED_WITHIN_DAYS": 7,        # 7일 초과 컷
-        # 2026-07-14 실측 결과 (30일 기준) 반영: 채널당 조회수 분산이 커
-        # top 10 만으로는 특정 채널 편중 → 15로 조정해 채널 다양성 확보.
-        # (채널당 쿼터·라운드 로빈·점수 보정 없이 조회수 순 정렬 그대로 유지)
-        # 2026-08-21 대표님 요청: 참고 채널이 10 → 22개로 확장되어 수집 pool 도 커짐
-        # (22채널 × 50 = 최대 1,100). Claude 검토 pool 을 15 → 30 으로 확장.
-        # FINAL_CANDIDATES 는 기존 5 유지 (2026-08-21 재확정 — 대표님이 이미
-        # "직접 후보/벤치마크 후보는 최대 5개씩 그대로 유지" 라고 안내하신 상태).
-        # 채널별 cap 은 미적용 (현재 순수 조회수 상위 30개 선정, 특정 채널이 상위
-        # 슬롯을 다수 차지할 수 있음). 향후 필요 시 재검토.
-        "MAX_ANALYSIS_CANDIDATES": 30,
-        "FINAL_CANDIDATES": 5,
-    },
-}
-
-
-# benchmark 공용 sent history — recent/standard 모두 여기 기록·참조
+# benchmark 공용 sent history 루트 — target 별 서브디렉으로 저장.
+#   신규:  benchmark/history/sent/{target}/YYYY-MM-DD_{mode}.json
+#   legacy(털어드림 backward-compat, 읽기만): benchmark/history/sent/YYYY-MM-DD_{recent,standard}.json
 BENCHMARK_SENT_HISTORY_DIR = "benchmark/history/sent"
 
 
-def resolve_config(profile="standard"):
-    """지정된 profile을 BENCHMARK_CONFIG에 병합해 반환. in-place 수정 안 함.
+# ============================================================================
+# Backward-compat: 기존 코드가 여전히 resolve_config("standard"/"recent") 형태로
+# 참조할 경우 target=teoldeurim + mode 매핑으로 리다이렉트. 신규 코드는
+# config.targets.resolve_mode(target_slug, mode) 를 직접 사용하세요.
+# ============================================================================
+_PROFILE_TO_MODE = {
+    "standard": "standard",
+    "recent":   "weekly",   # 기존 recent = 매주 발송 = weekly
+}
 
-    사용:
-        cfg = resolve_config(os.environ.get("PROFILE") or "standard")
-        cfg["MIN_VIEWS"]   # 프로파일별 override 반영된 값
+
+def resolve_config(profile="standard"):
+    """(legacy) 기존 profile 이름 → teoldeurim target·mode 로 자동 매핑.
+
+    새 코드는 targets.resolve_mode("teoldeurim", "weekly"|"standard") 를 사용하세요.
+    이 함수는 리팩터링 후 test 재실행·resend 등의 backward-compat 목적으로만 남아있습니다.
     """
-    if profile not in BENCHMARK_PROFILES:
+    # 지연 import — targets 패키지에서 이 파일을 참조하는 순환 회피용
+    import sys, os
+    _cfg_dir = os.path.dirname(__file__)
+    if _cfg_dir not in sys.path:
+        sys.path.insert(0, _cfg_dir)
+    from targets import resolve_mode as _resolve_mode
+    if profile not in _PROFILE_TO_MODE:
         raise ValueError(
-            f"Unknown PROFILE={profile!r}. "
-            f"Available: {sorted(BENCHMARK_PROFILES.keys())}"
+            f"Unknown PROFILE={profile!r} (legacy). "
+            f"Use targets.resolve_mode(target, mode) instead. "
+            f"Legacy available: {sorted(_PROFILE_TO_MODE.keys())}"
         )
-    merged = dict(BENCHMARK_CONFIG)
-    merged.update(BENCHMARK_PROFILES[profile])
+    mode = _PROFILE_TO_MODE[profile]
+    merged = _resolve_mode("teoldeurim", mode)
+    # 공용 config 를 함께 병합해 backward-compat 유지 (EXCLUDE_*, EXCLUDE_SENT_*, 등)
+    for k, v in BENCHMARK_CONFIG.items():
+        merged.setdefault(k, v)
+    # legacy _PROFILE 필드도 유지 (기존 코드가 참조)
     merged["_PROFILE"] = profile
     return merged
