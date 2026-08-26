@@ -1,16 +1,20 @@
 # -*- coding: utf-8 -*-
-"""원본 title enrichment fixture 회귀.
+"""(2026-08-26) discovery-only 구조 회귀 테스트.
+
+배경:
+  streamers/youtube-shorts-scraper 자체가 응답에 title(원본) + translatedTitle(번역)
+  을 모두 포함한다는 것을 실측(1,124건 · A/C actor output 필드 완전 동일)으로 확인.
+  별도 detail actor(streamers/youtube-scraper) 2차 호출은 오히려 8건의 mojibake 를
+  만들어냈고, Weekly Bundle Apify 실행 시간을 두 배로 늘렸다.
+  → detail actor 및 관련 STEP 5.9 enrichment 로직 완전 제거.
 
 지키는 원칙:
-  · discovery actor 의 title(번역본일 수 있음)을 그대로 신뢰하지 않는다.
-  · streamers/youtube-scraper 로부터
-      · title             = 원본 (예: '콘서트 중에 무릎 꿇었던 설윤')
-      · translatedTitle   = 번역 (예: 'Sullyoon kneeling during the concert')
-    를 받아 title_original / title_translated 로 분리 저장.
-  · Claude input · HTML 표시에는 반드시 title_original 사용.
-  · enrichment 실패 시 fallback 은 조용히 처리하지 않고 warning + fallback 플래그.
-
-fixture 기반이라 실제 Apify 호출 없이 검증.
+  · normalize_video() 가 discovery item 의 title 을 title_original 로,
+    translatedTitle 을 title_translated 로 저장한다.
+  · Claude 프롬프트·HTML 표시에 사용되는 v["title"] 은 항상 title_original.
+  · translatedTitle 이 None 이어도 정상 동작.
+  · production code 에서 APIFY_DETAIL_ACTOR / apify_enrich_titles /
+    enrich_video_titles_in_place / STEP 5.9 참조가 완전히 사라졌는지 grep 확인.
 
 실행:
   python tests/test_title_enrichment.py
@@ -37,190 +41,149 @@ def chk(name, cond, detail=""):
 
 
 # ═══════════════════════════════════════════════════════════════════
-# monkeypatch: apify_enrich_titles 를 fixture 응답으로 대체
+# 1) discovery item → normalize_video 결과 검증 (known fixture 포함)
 # ═══════════════════════════════════════════════════════════════════
-_FIXTURE = {
-    "cZwgBQHn740": {
-        "title_original":  "콘서트 중에 무릎 꿇었던 설윤",
-        "title_translated": "Sullyoon kneeling during the concert",
-    },
-    "vAAABBBBCCC": {
-        "title_original":  "잘 알려진 반전형 짤",
-        "title_translated": "Well-known plot-twist meme",
-    },
-    # 아래 영상은 enricher 가 응답하지 않음 → fallback path
-    # "vFAILfallback" 는 _FIXTURE 에 없음
-}
-
-
-def _fake_enrich(_token, urls):
-    """실제 API 호출 없이 fixture 로 응답. url → video_id (fixture key 포함 여부로)."""
-    out = {}
-    for u in urls:
-        for vid, rec in _FIXTURE.items():
-            if vid in u:
-                out[vid] = dict(rec)
-                break
-    return out
-
-
-benchmark.apify_enrich_titles = _fake_enrich
-
-
-# ═══════════════════════════════════════════════════════════════════
-# fixture videos — 하나는 성공 enrichment, 하나는 API 응답 없음(=fallback)
-# ═══════════════════════════════════════════════════════════════════
-videos = [
-    {
-        "video_id": "cZwgBQHn740",
-        "title": "Sullyoon kneeling during the concert",  # discovery = 번역본 (신뢰 X)
-        "url": "https://www.youtube.com/shorts/cZwgBQHn740",
-    },
-    {
-        "video_id": "vAAABBBBCCC",
-        "title": "Well-known plot-twist meme",           # discovery = 번역본
-        "url": "https://www.youtube.com/shorts/vAAABBBBCCC",
-    },
-    {
-        "video_id": "vFAILfallback",
-        "title": "Discovery English title (fallback path)",  # enricher 미응답
-        "url": "https://www.youtube.com/shorts/vFAILfallback",
-    },
-]
-
-
-stats = benchmark.enrich_video_titles_in_place("token-x", videos)
-chk("STAT-01: targets=3 (unique)",
-    stats["targets"] == 3, f"got {stats}")
-chk("STAT-02: enriched=2",
-    stats["enriched"] == 2, f"got {stats}")
-chk("STAT-03: fallback=1",
-    stats["fallback"] == 1, f"got {stats}")
-
-
-# ═══════════════════════════════════════════════════════════════════
-# 성공 enrichment case: title 이 원본(한국어) 으로 교체됨
-# ═══════════════════════════════════════════════════════════════════
-v0 = videos[0]
-chk("EN-01: title_original 저장",
-    v0.get("title_original") == "콘서트 중에 무릎 꿇었던 설윤")
-chk("EN-02: title_translated 저장",
-    v0.get("title_translated") == "Sullyoon kneeling during the concert")
-chk("EN-03: title 자체가 title_original 으로 덮어씀 (Claude/HTML 원본 사용)",
-    v0.get("title") == "콘서트 중에 무릎 꿇었던 설윤")
-chk("EN-04: title_discovery 에 원본 discovery 값 보존",
-    v0.get("title_discovery") == "Sullyoon kneeling during the concert")
-chk("EN-05: fallback 플래그 없음",
-    not v0.get("title_enrich_fallback"))
-
-v1 = videos[1]
-chk("EN-06: 두 번째 영상도 원본으로 교체",
-    v1.get("title") == "잘 알려진 반전형 짤"
-    and v1.get("title_original") == "잘 알려진 반전형 짤"
-    and v1.get("title_translated") == "Well-known plot-twist meme")
-
-
-# ═══════════════════════════════════════════════════════════════════
-# fallback case: enricher 응답 없음 → discovery title 을 원본으로 취급하되 플래그
-# ═══════════════════════════════════════════════════════════════════
-v2 = videos[2]
-chk("FB-01: fallback 플래그 True",
-    v2.get("title_enrich_fallback") is True)
-chk("FB-02: title 은 discovery 값 그대로",
-    v2.get("title") == "Discovery English title (fallback path)")
-chk("FB-03: title_original 은 discovery 값으로 fallback",
-    v2.get("title_original") == "Discovery English title (fallback path)")
-chk("FB-04: title_translated = None (모름)",
-    v2.get("title_translated") is None)
-chk("FB-05: title_discovery 보존",
-    v2.get("title_discovery") == "Discovery English title (fallback path)")
-
-
-# ═══════════════════════════════════════════════════════════════════
-# dedup: 동일 video_id 가 목록에 두 번 들어와도 API 호출은 1회
-# ═══════════════════════════════════════════════════════════════════
-call_count = {"n": 0, "urls_seen": []}
-def _counting_enrich(_token, urls):
-    call_count["n"] += 1
-    call_count["urls_seen"] = list(urls)
-    out = {}
-    for u in urls:
-        for vid, rec in _FIXTURE.items():
-            if vid in u:
-                out[vid] = dict(rec)
-                break
-    return out
-
-benchmark.apify_enrich_titles = _counting_enrich
-
-dup_videos = [
-    {"video_id": "cZwgBQHn740",  "title": "translated1",
-     "url": "https://www.youtube.com/shorts/cZwgBQHn740"},
-    {"video_id": "cZwgBQHn740",  "title": "translated1",
-     "url": "https://www.youtube.com/shorts/cZwgBQHn740"},  # 중복
-    {"video_id": "vAAABBBBCCC",  "title": "translated2",
-     "url": "https://www.youtube.com/shorts/vAAABBBBCCC"},
-]
-stats2 = benchmark.enrich_video_titles_in_place("t", dup_videos)
-chk("DEDUP-01: unique targets = 2 (중복 dedup)",
-    stats2["targets"] == 2, f"got {stats2}")
-chk("DEDUP-02: enrich 함수 1회 호출",
-    call_count["n"] == 1, f"got {call_count['n']}")
-chk("DEDUP-03: 호출된 URL 은 2개 (unique)",
-    len(call_count["urls_seen"]) == 2, f"got {call_count['urls_seen']}")
-chk("DEDUP-04: 중복 항목도 각각 title_original 반영",
-    dup_videos[0]["title_original"] == dup_videos[1]["title_original"]
-    == "콘서트 중에 무릎 꿇었던 설윤")
-
-
-# ═══════════════════════════════════════════════════════════════════
-# _target_angle / analyze_video system 은 원본 title 사용해야 (contract 확인)
-# ═══════════════════════════════════════════════════════════════════
-# analyze_video 는 v["title"] 을 그대로 프롬프트에 넣는다.
-# enrichment 이후 v["title"] == title_original 임을 위에서 확인했으므로
-# Claude 입력은 자동으로 원본이 됨. 이 로직 자체를 명시적으로 재확인.
-sample = {
-    "video_id": "cZwgBQHn740",
-    "title": "Sullyoon kneeling during the concert",
+# 사용자 명시 fixture: cZwgBQHn740 · 한국어 원본 + 영어 번역
+_discovery_item = {
+    "id": "cZwgBQHn740",
     "url": "https://www.youtube.com/shorts/cZwgBQHn740",
+    "title": "콘서트 중에 무릎 꿇었던 설윤",
+    "translatedTitle": "Sullyoon kneeling during the concert",
+    "channelName": "짤덕방",
+    "channelId": "UCcerVbAluh-1ifuEH6ZMqsw",
+    "viewCount": 31401,
+    "likes": 684,
+    "commentsCount": 2,
+    "duration": "00:00:16",
+    "date": "2026-08-13T10:00:16.000Z",
+    "numberOfSubscribers": 13300,
+    "hashtags": ["엔믹스", "설윤", "kpop"],
+    "thumbnailUrl": "https://i.ytimg.com/vi/cZwgBQHn740/maxresdefault.jpg",
+    "text": "#엔믹스 #설윤 #shorts",
 }
-benchmark.apify_enrich_titles = _fake_enrich   # counting_enrich 뒤에 원 fixture 로 복원
-benchmark.enrich_video_titles_in_place("t", [sample])
-chk("CLAUDE-01: enrichment 후 v['title'] 이 원본",
-    sample["title"] == "콘서트 중에 무릎 꿇었던 설윤")
-chk("CLAUDE-02: v['title_original'] 도 원본",
-    sample["title_original"] == "콘서트 중에 무릎 꿇었던 설윤")
+
+v = benchmark.normalize_video(_discovery_item)
+
+chk("KNOWN-01: title_original = 한국어 원본",
+    v["title_original"] == "콘서트 중에 무릎 꿇었던 설윤",
+    f"got {v['title_original']!r}")
+chk("KNOWN-02: title_translated = 영어 번역",
+    v["title_translated"] == "Sullyoon kneeling during the concert",
+    f"got {v['title_translated']!r}")
+chk("KNOWN-03: title = title_original (Claude / HTML 원본 사용)",
+    v["title"] == "콘서트 중에 무릎 꿇었던 설윤")
+chk("KNOWN-04: title ≠ title_translated (번역본 미사용)",
+    v["title"] != v["title_translated"])
+chk("KNOWN-05: video_id 정확",
+    v["video_id"] == "cZwgBQHn740")
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Hard-cut · MAX_VIEWS 초과 카드도 HTML 에 title 이 노출되므로 원본 title 사용
-# → benchmark.py 는 all_collected_pool 전체를 enrichment 대상으로 삼아,
-#   pool 내 dict 를 공유 참조하는 hard_excluded / max_views_excluded 카드에도
-#   원본 title 이 반영되는지 확인 (in-place 반영 원칙).
+# 2) translatedTitle 이 None 이어도 정상 (유튜브가 번역 미제공)
 # ═══════════════════════════════════════════════════════════════════
-_pool_video = {
-    "video_id": "vAAABBBBCCC",
-    "title": "Well-known plot-twist meme",       # discovery (번역본)
-    "url": "https://www.youtube.com/shorts/vAAABBBBCCC",
-    # 이 영상이 Hard 컷된다고 가정: exclusion_reason 이 붙어있음
-    "exclusion_reason": "길이 초과 (200초)",
+_no_translated = {
+    "id": "abc123XYZ00",
+    "title": "믹스틱 나눔해요!",
+    "translatedTitle": None,   # 실측 케이스 재현
+    "channelName": "엔믹스자리표",
+    "duration": "00:00:21",
 }
-# hard_excluded_list 는 pool 안의 같은 dict 를 참조 (실제 코드 흐름과 동일)
-hard_excluded_list = [_pool_video]
-all_collected_pool = [_pool_video]
+v2 = benchmark.normalize_video(_no_translated)
+chk("NONE-01: translatedTitle=None → title_translated=None",
+    v2["title_translated"] is None)
+chk("NONE-02: title_original 는 그대로 원본",
+    v2["title_original"] == "믹스틱 나눔해요!")
+chk("NONE-03: title = title_original 유지",
+    v2["title"] == "믹스틱 나눔해요!")
 
-# STEP 5.9 시뮬레이션 — all_collected_pool 전체 enrichment
-benchmark.enrich_video_titles_in_place("t", all_collected_pool)
 
-chk("POOL-01: pool 내 영상 원본 title 로 in-place 갱신",
-    _pool_video["title"] == "잘 알려진 반전형 짤")
-chk("POOL-02: hard_excluded_list 도 같은 dict 참조 → 원본 반영",
-    hard_excluded_list[0]["title"] == "잘 알려진 반전형 짤"
-    and hard_excluded_list[0]["title_original"] == "잘 알려진 반전형 짤")
-chk("POOL-03: Hard 컷 사유는 유지",
-    hard_excluded_list[0]["exclusion_reason"] == "길이 초과 (200초)")
-chk("POOL-04: title_discovery 는 번역본 그대로 보존",
-    _pool_video["title_discovery"] == "Well-known plot-twist meme")
+# ═══════════════════════════════════════════════════════════════════
+# 3) translatedTitle 필드 자체가 없어도 정상 (스키마 방어)
+# ═══════════════════════════════════════════════════════════════════
+_no_field = {
+    "id": "noFieldXYZ",
+    "title": "번역 필드 자체가 없는 케이스",
+    # translatedTitle 키 자체 없음
+    "channelName": "테스트",
+}
+v3 = benchmark.normalize_video(_no_field)
+chk("MISS-01: translatedTitle 키 없음 → title_translated=None",
+    v3["title_translated"] is None)
+chk("MISS-02: title_original 는 원본 그대로",
+    v3["title_original"] == "번역 필드 자체가 없는 케이스")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 4) Claude analyze_video 는 v["title"] 을 프롬프트에 사용 → 원본 사용 확인
+# ═══════════════════════════════════════════════════════════════════
+# analyze_video 는 실제로 Anthropic 호출을 하지만 여기서는 프롬프트 조립 로직만 검증.
+# 소스를 열어 'title' 참조가 v["title"] 임을 확인 (원본 사용 contract).
+_src = Path("scripts/benchmark.py").read_text(encoding="utf-8")
+chk("CLAUDE-01: analyze_video user prompt 에 v['title'] 사용",
+    "제목: {v['title']}" in _src)
+chk("CLAUDE-02: analyze_video 가 v['title_translated'] 를 프롬프트에 넣지 않음 (번역본 미사용)",
+    "v['title_translated']" not in _src
+    and "translated" not in _src.split("def analyze_video", 1)[1].split("def analyze_patterns", 1)[0])
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 5) HTML 렌더도 v["title"] 사용 → 원본 표시 확인
+# ═══════════════════════════════════════════════════════════════════
+# render_report 계열 (_render_candidate, _render_si_row) 는 v["title"] 을 표시.
+chk("HTML-01: _render_candidate 는 v['title'] 표시",
+    "esc_html(v[\"title\"])" in _src or "esc_html(v['title'])" in _src)
+chk("HTML-02: _render_si_row 도 v.get('title'...) 표시",
+    "v.get(\"title\"" in _src or "v.get('title'" in _src)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 6) production code 에서 detail actor 참조 완전 제거 grep
+# ═══════════════════════════════════════════════════════════════════
+_bench_src = Path("scripts/benchmark.py").read_text(encoding="utf-8")
+_config_src = Path("config/benchmark_config.py").read_text(encoding="utf-8")
+
+def _has_code_ref(src, needle):
+    """이력 코멘트 제외하고 실 코드 참조가 있는지 대략 판정.
+    라인 단위로 훑되, `#` 로 시작하는 pure 코멘트 라인은 무시."""
+    for line in src.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            continue
+        if needle in line:
+            return line
+    return None
+
+for needle in ["APIFY_DETAIL_ACTOR", "apify_enrich_titles",
+               "enrich_video_titles_in_place", "youtube-scraper"]:
+    b = _has_code_ref(_bench_src, needle)
+    c = _has_code_ref(_config_src, needle)
+    chk(f"GREP-BENCH[{needle}]: production benchmark.py 에 실 참조 없음",
+        b is None, f"line: {b!r}" if b else "")
+    chk(f"GREP-CONF[{needle}]: production config/benchmark_config.py 에 실 참조 없음",
+        c is None, f"line: {c!r}" if c else "")
+
+# 함수 자체 삭제 확인 (module attr 접근 시 AttributeError)
+chk("REMOVE-01: apify_enrich_titles 함수 제거됨",
+    not hasattr(benchmark, "apify_enrich_titles"))
+chk("REMOVE-02: enrich_video_titles_in_place 함수 제거됨",
+    not hasattr(benchmark, "enrich_video_titles_in_place"))
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 7) apify_collect 는 discovery actor 만 호출 → Weekly Bundle 총 3 runs 예상
+# ═══════════════════════════════════════════════════════════════════
+_ac_src = _bench_src.split("def apify_collect", 1)[1].split("def normalize_video", 1)[0]
+chk("SINGLE-01: apify_collect 는 APIFY_DISCOVERY_ACTOR 만 참조",
+    "APIFY_DISCOVERY_ACTOR" in _ac_src)
+chk("SINGLE-02: apify_collect 는 APIFY_DETAIL_ACTOR 참조 없음",
+    "APIFY_DETAIL_ACTOR" not in _ac_src)
+
+# Weekly Bundle 예상 흐름 재확인 (send_report.run_weekly_bundle 은 3 target 순차)
+_sr = Path("scripts/send_report.py").read_text(encoding="utf-8")
+_targets = _sr.split("_WEEKLY_BUNDLE_TARGETS = [", 1)[1].split("]", 1)[0]
+for slug in ["teoldeurim", "myohanduk", "jjalduk"]:
+    chk(f"BUNDLE[{slug}]: Weekly Bundle 3 target 에 포함",
+        f'"{slug}"' in _targets)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -228,7 +191,7 @@ chk("POOL-04: title_discovery 는 번역본 그대로 보존",
 # ═══════════════════════════════════════════════════════════════════
 print()
 print("=" * 78)
-print(" title enrichment fixture 회귀 결과")
+print(" discovery-only + normalize_video 회귀 결과")
 print("=" * 78)
 p = f = 0
 for name, ok, detail in checks:

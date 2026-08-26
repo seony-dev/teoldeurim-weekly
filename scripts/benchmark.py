@@ -261,144 +261,20 @@ def apify_collect(token, channels, max_per_channel, sort_by):
     return items
 
 
-def apify_enrich_titles(token, video_urls, timeout_sec=600):
-    """streamers/youtube-scraper 액터로 video 단위 원본 title 을 조회.
-
-    반환: {video_id: {"title_original": str, "title_translated": str|None}}
-    실패 시 조용히 fallback — 개별 항목은 dict 에서 빠지며, 호출자가 warning 처리.
-
-    상세:
-      · discovery actor 의 title 은 YouTube 자동 번역본일 수 있어 신뢰 불가.
-      · youtube-scraper 는 영상 단위로 `title` (원본) 및 `translatedTitle` 을 반환.
-      · 이 함수는 최대 timeout_sec 동안 폴링하고, 성공 시 dataset 을 읽는다.
-      · video_urls 는 중복 제거 후 넘겨야 한다 (호출량 절감은 caller 책임).
-    """
-    result = {}
-    if not video_urls:
-        return result
-    actor_id = CFG.get("APIFY_DETAIL_ACTOR", "streamers/youtube-scraper")
-    actor_path = actor_id.replace("/", "~")
-    # youtube-scraper 는 startUrls 배열을 받는다.
-    run_input = {
-        "startUrls": [{"url": u} for u in video_urls],
-        # 아이템별 downloadSubtitles/comment 등은 필요 없음 (title/desc 만).
-        "maxResults": len(video_urls),
-    }
-    print(f"  [Apify title enrich] 액터 실행: {actor_id} · {len(video_urls)}개 영상")
-    start_url = f"https://api.apify.com/v2/acts/{actor_path}/runs?token={quote(token)}"
-    try:
-        run = http_json(start_url, data=run_input, method="POST", timeout=60)["data"]
-    except Exception as e:
-        print(f"  ⚠️ title enrich 시작 실패 — 원본 title 확보 불가 (fallback: discovery title): {e}")
-        return result
-    run_id = run["id"]
-    deadline = time.time() + timeout_sec
-    status = run.get("status", "")
-    while time.time() < deadline:
-        time.sleep(10)
-        try:
-            status_url = f"https://api.apify.com/v2/actor-runs/{run_id}?token={quote(token)}"
-            run = http_json(status_url, timeout=60)["data"]
-        except Exception as e:
-            print(f"  ⚠️ title enrich 폴링 실패: {e}")
-            continue
-        status = run.get("status", "")
-        if status in ("SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT", "TIMING-OUT"):
-            break
-    if status != "SUCCEEDED":
-        print(f"  ⚠️ title enrich 액터가 정상 종료 안 함 (상태: {status}) — 원본 title 확보 실패")
-        return result
-    dataset_id = run["defaultDatasetId"]
-    items_url = (f"https://api.apify.com/v2/datasets/{dataset_id}/items"
-                 f"?token={quote(token)}&format=json&clean=true")
-    try:
-        items = http_json(items_url, timeout=120) or []
-    except Exception as e:
-        print(f"  ⚠️ title enrich dataset 읽기 실패: {e}")
-        return result
-    for it in items:
-        # youtube-scraper 스키마: id / url / title / translatedTitle
-        vid = it.get("id") or it.get("videoId") or ""
-        if not vid:
-            # url 에서 fallback 추출. shorts/{id}, watch?v={id}, /v/{id} 만 매치
-            # (단순 `/` alternative 는 `/shorts` 자체가 잡히는 문제로 제거)
-            u = it.get("url") or ""
-            m = re.search(r"(?:shorts/|watch\?v=|/v/)([A-Za-z0-9_-]{6,})", u)
-            if m:
-                vid = m.group(1)
-        if not vid:
-            continue
-        result[vid] = {
-            "title_original": it.get("title") or "",
-            "title_translated": it.get("translatedTitle") or None,
-        }
-    print(f"  [Apify title enrich] {len(result)}/{len(video_urls)}개 원본 title 확보")
-    return result
-
-
-def enrich_video_titles_in_place(token, videos):
-    """videos 리스트의 원본 title 을 in-place 보강.
-
-    호출 전 videos 는 대상 확정 리스트 (to_analyze ∪ HTML 표시 대상). 여기서는
-    video_id 기준 dedup 하여 실제 Apify 호출량을 최소화한다.
-
-    각 video 에 아래 필드가 부착된다:
-      v["title_original"]    : 원본 (한국어 등) — Claude / HTML 에 사용
-      v["title_translated"]  : 번역본 (있으면), 없으면 None
-      v["title"]             : title_original 으로 덮어씀 (기존 코드 backward compat)
-      v["title_discovery"]   : discovery actor 가 준 원본값 (fallback 확인용)
-
-    enrichment 실패 시 title 은 discovery 값 유지 + warning 로그.
-
-    반환: {"targets": int, "enriched": int, "fallback": int}
-    """
-    if not videos:
-        return {"targets": 0, "enriched": 0, "fallback": 0}
-    # video_id 기준 dedup — 같은 영상이 to_analyze 와 HTML 표시 대상에 동시 포함 가능
-    seen = {}
-    for v in videos:
-        vid = v.get("video_id")
-        if not vid or vid in seen:
-            continue
-        seen[vid] = v
-    # url 확보 (없으면 shorts/<id> 로 조립)
-    url_map = {}
-    for vid, v in seen.items():
-        u = (v.get("url") or "").strip()
-        if not u:
-            u = f"https://www.youtube.com/shorts/{vid}"
-        url_map[vid] = u
-    urls = list(url_map.values())
-    enriched = apify_enrich_titles(token, urls)
-    # in-place 반영
-    ok, fail = 0, 0
-    for v in videos:
-        vid = v.get("video_id")
-        if not vid:
-            continue
-        # discovery 원본값 보존 (fallback 진단용)
-        if "title_discovery" not in v:
-            v["title_discovery"] = v.get("title", "")
-        rec = enriched.get(vid)
-        if rec and rec.get("title_original"):
-            v["title_original"] = rec["title_original"]
-            v["title_translated"] = rec.get("title_translated")
-            # Claude / HTML 모두 이 값을 사용하도록 title 자체를 갱신
-            v["title"] = rec["title_original"]
-            ok += 1
-        else:
-            # 실패 — discovery title 을 원본으로 취급하되 명시적 fallback 표기
-            v["title_original"] = v.get("title", "")
-            v["title_translated"] = None
-            v["title_enrich_fallback"] = True
-            fail += 1
-    if fail:
-        print(f"  ⚠️ title enrich fallback: {fail}개 영상은 discovery title 을 그대로 사용합니다 (원본 여부 미확정)")
-    return {"targets": len(seen), "enriched": ok, "fallback": fail}
-
 
 def normalize_video(item):
-    """Apify 액터의 원본 아이템을 일관된 dict로 변환 (필드명 변형 방어)."""
+    """Apify discovery actor 의 원본 아이템을 일관된 dict 로 변환.
+
+    (2026-08-26) discovery actor 응답이 이미 title(유튜브 원본) 과 translatedTitle
+    (번역) 을 모두 반환한다는 것을 실측 검증(1,124건 · A/C actor 출력 필드 완전 동일)
+    으로 확인. 별도 detail 2차 호출은 제거되었고, 여기서 discovery item 을 그대로
+    원본으로 취급한다.
+
+    필드:
+      · title_original    = discovery 의 title (유튜브 원본)
+      · title_translated  = discovery 의 translatedTitle (없으면 None)
+      · title             = title_original (Claude / HTML 모두 이 값 사용)
+    """
     def first(*keys):
         for k in keys:
             if k in item and item[k] not in (None, "", []):
@@ -410,9 +286,17 @@ def normalize_video(item):
     if not url and video_id:
         url = f"https://www.youtube.com/shorts/{video_id}"
 
+    # discovery actor 의 title 이 곧 유튜브 원본. translatedTitle 은 유튜브가
+    # 번역본을 제공한 경우에만 값이 오고, 아니면 None.
+    _title_original = first("title", "name") or "(제목 없음)"
+    _title_translated = item.get("translatedTitle")  # 없거나 None 이면 그대로 None
+
     vid = {
         "video_id": video_id,
-        "title": first("title", "name") or "(제목 없음)",
+        # 사람이 보는 title / Claude 프롬프트에 들어가는 title 은 원본만 사용.
+        "title": _title_original,
+        "title_original": _title_original,
+        "title_translated": _title_translated,
         "url": url,
         "channel_name": first("channelName", "channelTitle", "channel", "author") or "",
         "channel_id": first("channelId", "channelID", "channelId") or "",
@@ -2234,18 +2118,11 @@ def main():
         # Standard: 기존 동작 (sent 여부 무관 상위 N)
         to_analyze = passed[:CFG["MAX_ANALYSIS_CANDIDATES"]]
 
-    # ── STEP 5.9. 원본 title enrichment (youtube-scraper) ──
-    # discovery actor 의 title 은 YouTube 자동 번역본일 수 있어 신뢰 불가.
-    # 최종 HTML 에 title 이 노출되는 모든 stage (collected / max_views_excluded /
-    # hard_excluded / analyzed / sent_excluded / direct_final / benchmark_final) 을 대상.
-    # all_collected_pool 은 이 모든 stage 의 union 이고, 각 stage 리스트는 이 pool 의
-    # dict 를 공유 참조하므로 in-place enrichment 한 번이면 모든 카드에 반영된다.
-    # 동일 video_id 는 한 번만 호출 (enrich_video_titles_in_place 내부 dedup).
-    print(f"\n[STEP 5.9] 원본 title enrichment (video-level Apify 호출)")
-    enrich_targets = list(all_collected_pool)   # HTML 에 노출되는 모든 영상
-    enrich_stats = enrich_video_titles_in_place(apify_token, enrich_targets)
-    print(f"  대상 {enrich_stats['targets']}개 (unique) → "
-          f"enriched {enrich_stats['enriched']}개 / fallback {enrich_stats['fallback']}개")
+    # (2026-08-26) STEP 5.9 원본 title enrichment (streamers/youtube-scraper) 제거.
+    # discovery actor (streamers/youtube-shorts-scraper) 응답 자체가 이미 title(원본)
+    # + translatedTitle(번역) 을 모두 반환한다는 것을 실측(1,124건 · A/C actor output
+    # 필드 완전 동일)으로 확인. normalize_video 에서 title_original/title_translated
+    # 를 직접 저장하므로 별도 detail actor 호출 불필요.
 
     # ── STEP 6. Claude 분석 (영상별 적합도 + 벤치마크 가치, 두 축 독립 평가) ──
     total_usage = {"input": 0, "cache_write": 0, "cache_read": 0, "out": 0}

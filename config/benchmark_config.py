@@ -46,10 +46,11 @@ BENCHMARK_CONFIG = {
     # 채널 단위 discovery — 참고 채널의 인기/최신 Shorts 를 대량 조회.
     # 정렬: POPULAR(인기순) / NEWEST / OLDEST — actor 특성상 oldestPostDate 지정 시
     # NEWEST 로 강제 리셋된다. 업로드 기간 컷은 액터에 맡기지 않고 로컬에서 처리.
+    #
+    # (2026-08-26) discovery actor 자체가 title(원본) + translatedTitle(번역) 을 함께
+    # 반환하는 것을 실측 확인 (1,124건 검증). 별도 detail actor(youtube-scraper) 2차
+    # 호출은 제거됨. Weekly Bundle 3 target 각 discovery 1회씩 = 총 3 runs.
     "APIFY_DISCOVERY_ACTOR": "streamers/youtube-shorts-scraper",
-    # 영상 단위 detail — 원본 title 확보용 (2026-08-25 리팩터링에서 도입).
-    # discovery actor 의 title 은 YouTube 자동 번역본일 수 있어 신뢰 불가.
-    "APIFY_DETAIL_ACTOR": "streamers/youtube-scraper",
 
     # 이미 발송된 영상(sent history)은 후보 리스트에서 제외.
     # profile 별 dedup 적용 시점:
