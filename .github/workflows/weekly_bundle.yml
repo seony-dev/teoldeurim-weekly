@@ -13,18 +13,12 @@ name: 매주 금 Weekly Bundle (털어드림/묘한덕질/짤덕방)
 #   · Gmail 발송 성공 후에만 각 target sent history 를 기록 (target namespace).
 #   · recipient_override 지정 실행은 검증용 test 발송 — production sent history 를 오염시키지 않음.
 #
-# ============================================================================
-# (2026-08-25 임시) 2026-08-26(수) 08:42 KST · one-time 실제 발송 테스트 트리거.
-# → 수요일 cron 을 임시로 추가하되, 첫 step 에서 KST 오늘 날짜가 정확히 2026-08-26
-#   인 경우에만 실제 파이프라인을 실행하도록 guard. 다음 주 수요일 실행 시엔
-#   guard 에서 즉시 skip 되어 부작용 없음.
-# → 내일 (2026-08-26) 메일 수신 확인 후 이 cron 라인 + guard step 을 제거하고
-#   workflow env 를 운영값 (RECIPIENT_EMAIL / TEST_MODE 제거) 로 전환.
-# ============================================================================
+# (2026-08-26 운영 전환) 2026-08-26 08:42 KST 임시 테스트 실행에서 메일 수신·첨부
+# 정상 확인. RECIPIENT_EMAIL_SELF → RECIPIENT_EMAIL / TEST_MODE 제거 / 임시 수요일
+# cron·날짜 guard 제거 완료. 이제부터 매주 금 08:42 KST 정식 운영.
 on:
   schedule:
-    - cron: '42 23 * * 4'   # 목요일 23:42 UTC = 금요일 08:42 KST (정식 운영 스케줄)
-    - cron: '42 23 * * 2'   # (임시) 화요일 23:42 UTC = 수요일 08:42 KST — 2026-08-26 one-time test 용
+    - cron: '42 23 * * 4'   # 목요일 23:42 UTC = 금요일 08:42 KST (정식 운영)
   workflow_dispatch:
     inputs:
       recipient_override:
@@ -71,67 +65,26 @@ jobs:
       contents: write   # benchmark/history/sent/{target}/ 커밋 권한
 
     steps:
-      # ============================================================
-      # (임시 · 2026-08-26 one-time test guard)
-      # 수요일 cron (`42 23 * * 2`) 은 매주 화요일 UTC 23:42 에 트리거되지만,
-      # KST 오늘 날짜가 정확히 2026-08-26 인 경우에만 실제 파이프라인을 진행한다.
-      # workflow_dispatch (수동) 는 언제든 통과. schedule 트리거는 금요일 (요일 5) 도 통과.
-      # → 다음 주 수요일부터는 자동으로 skip. 이 guard step 은 내일 확인 후
-      #   수요일 cron 라인과 함께 제거.
-      # ============================================================
-      - name: (임시) one-time test 트리거 날짜 guard
-        id: guard
-        run: |
-          today_kst=$(TZ=Asia/Seoul date +%Y-%m-%d)
-          dow_kst=$(TZ=Asia/Seoul date +%u)   # 1(월) ~ 7(일)
-          echo "KST today = $today_kst / dow = $dow_kst / event = $GITHUB_EVENT_NAME"
-          # workflow_dispatch: 항상 진행
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "run=1" >> "$GITHUB_OUTPUT"
-            echo "✅ workflow_dispatch — 진행"
-            exit 0
-          fi
-          # schedule + KST 금요일(5): 정식 운영 실행 → 진행
-          if [ "$dow_kst" = "5" ]; then
-            echo "run=1" >> "$GITHUB_OUTPUT"
-            echo "✅ KST 금요일 정식 실행 — 진행"
-            exit 0
-          fi
-          # schedule + KST 오늘 == 2026-08-26: one-time 테스트 실행 → 진행
-          if [ "$today_kst" = "2026-08-26" ]; then
-            echo "run=1" >> "$GITHUB_OUTPUT"
-            echo "✅ 2026-08-26 one-time 테스트 트리거 — 진행"
-            exit 0
-          fi
-          # 그 외 schedule 트리거는 skip (다음 주 수요일 등)
-          echo "run=" >> "$GITHUB_OUTPUT"
-          echo "⏭️  KST 오늘 ($today_kst / dow=$dow_kst) 은 실행 대상 아님 — skip"
-
       - name: 레포 체크아웃
-        if: steps.guard.outputs.run == '1'
         uses: actions/checkout@v4
 
       - name: Python 3.11 설치
-        if: steps.guard.outputs.run == '1'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: 의존성 설치
-        if: steps.guard.outputs.run == '1'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: 시크릿 사전 검증
-        if: steps.guard.outputs.run == '1'
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          # 검증 단계: 본인 수신자 시크릿만 확인. 운영 전환 시 RECIPIENT_EMAIL 로 교체.
-          RECIPIENT_EMAIL_SELF: ${{ secrets.RECIPIENT_EMAIL_SELF }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
         run: |
           set -e
           fail=0
@@ -143,31 +96,20 @@ jobs:
           check ANTHROPIC_API_KEY ${#ANTHROPIC_API_KEY}
           check GMAIL_ADDRESS ${#GMAIL_ADDRESS}
           check GMAIL_APP_PASSWORD ${#GMAIL_APP_PASSWORD}
-          check RECIPIENT_EMAIL_SELF ${#RECIPIENT_EMAIL_SELF}
+          check RECIPIENT_EMAIL ${#RECIPIENT_EMAIL}
           if [ $fail -eq 1 ]; then
             echo "👉 Settings → Secrets 에서 시크릿을 확인하세요."
             exit 1
           fi
 
-      # ============================================================
-      # (2026-08-25) 검증 단계 설정
-      #   · recipient : RECIPIENT_EMAIL_SELF (본인) 사용 — 대표님/팀원에게 미발송
-      #   · TEST_MODE=1 : subject 앞에 '[TEST] ' 접두어 + production sent history 저장 skip
-      # ─ 운영 전환 시 ─
-      #   1) RECIPIENT_EMAIL_SELF → RECIPIENT_EMAIL 로 참조 변경 (secret 값 자체는 무변경)
-      #   2) TEST_MODE 라인 제거 또는 값을 '' 로 변경
-      # ============================================================
       - name: Weekly Bundle 실행 (--mode=weekly-bundle)
-        if: steps.guard.outputs.run == '1'
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          # 검증 단계: 본인(RECIPIENT_EMAIL_SELF) · 운영 전환 시 RECIPIENT_EMAIL 로 변경.
-          RECIPIENT_EMAIL: ${{ github.event.inputs.recipient_override != '' && github.event.inputs.recipient_override || secrets.RECIPIENT_EMAIL_SELF }}
-          # 검증 단계: [TEST] prefix + sent history skip. 운영 전환 시 이 라인 삭제.
-          TEST_MODE: '1'
+          # 운영: production 수신자. recipient_override 는 workflow_dispatch 로만 검증용.
+          RECIPIENT_EMAIL: ${{ github.event.inputs.recipient_override != '' && github.event.inputs.recipient_override || secrets.RECIPIENT_EMAIL }}
           FORCE_RESCAN: ${{ github.event.inputs.force_rescan == 'true' && '1' || '' }}
           REPORT_DATE: ${{ github.event.inputs.report_date || '' }}
           NOTICE: ${{ github.event.inputs.notice || '' }}
@@ -176,9 +118,8 @@ jobs:
         run: python scripts/send_report.py --mode=weekly-bundle
 
       - name: sent history 커밋 (3 target namespace)
-        # guard 통과 + recipient_override 미지정 + 정식 발송 (TEST_MODE 하에서는
-        # send_report.py 가 sent 파일 자체를 만들지 않아 커밋 대상 0 → 자연히 skip).
-        if: steps.guard.outputs.run == '1' && github.event.inputs.recipient_override == ''
+        # recipient_override 지정 실행은 검증용 → sent history 커밋 skip.
+        if: github.event.inputs.recipient_override == ''
         run: |
           git config user.name "teoldeurim-bot"
           git config user.email "actions@github.com"
