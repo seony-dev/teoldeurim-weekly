@@ -1461,6 +1461,25 @@ def _render_stage_body(key, items, angle_label="변형 각도"):
     return f'<div class="si-list">{rows}</div>'
 
 
+def _render_duration_label(min_dur, max_dur):
+    """길이 필터 기준 문구 렌더 — MAX_DURATION_SEC=None(상한 없음) 케이스 대응.
+
+    (2026-08-26) 이전 렌더는 `{max_dur}초 이하` 를 무조건 문자열 삽입해 max_dur=None
+    이면 "None초 이하" 로 출력되던 버그가 있었음. 아래 로직으로 명시 처리.
+
+    반환 예:
+      · min=15, max=180  → "15초 이상 ~ 180초 이하 (Shorts 형식)"    (털어드림)
+      · min=20, max=None → "20초 이상 (상한 없음)"                    (묘한덕질/짤덕방)
+      · min=0,  max=180  → "180초 이하 (Shorts 형식)"                  (하한 미설정)
+      · min=0,  max=None → "제한 없음"                                (양쪽 미설정)
+    """
+    if max_dur is None:
+        return f"{min_dur}초 이상 (상한 없음)" if min_dur else "제한 없음"
+    if min_dur:
+        return f"{min_dur}초 이상 ~ {max_dur}초 이하 (Shorts 형식)"
+    return f"{max_dur}초 이하 (Shorts 형식)"
+
+
 def render_report(stage_data, patterns, today_label, ref_channels, config_used,
                   profile="standard", target=None):
     """탭 UI 형태의 벤치마크 리포트 HTML 생성.
@@ -1496,8 +1515,10 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used,
     max_views = config_used.get("MAX_VIEWS", 0)
     max_views_label = _fmt_max_views(max_views)
     min_views = config_used.get("MIN_VIEWS", 0)
-    max_dur = config_used.get("MAX_DURATION_SEC", 0)
-    min_dur = config_used.get("MIN_DURATION_SEC", 0)
+    # MAX_DURATION_SEC 는 None(상한 없음) 케이스 지원 — dict.get 은 key 존재 시 default
+    # 를 반환하지 않고 저장된 값 그대로 (None) 반환. 렌더에서 None 을 명시적으로 처리.
+    max_dur = config_used.get("MAX_DURATION_SEC")
+    min_dur = config_used.get("MIN_DURATION_SEC") or 0
     within_days = config_used.get("UPLOADED_WITHIN_DAYS", 0)
     # 사용자-facing 업로드 age 범위 문구 — 실제 local timestamp 필터 기준 반영.
     # (내부 API pull buffer 는 노출 안 함)
@@ -1667,7 +1688,7 @@ def render_report(stage_data, patterns, today_label, ref_channels, config_used,
     <div class="criteria">
       <ul>
         {max_views_li}
-        <li><b>길이</b> {(str(min_dur)+"초 이상 ~ ") if min_dur else ""}{max_dur}초 이하 (Shorts 형식)</li>
+        <li><b>길이</b> {_render_duration_label(min_dur, max_dur)}</li>
         <li><b>업로드</b> {age_range_label}</li>
         <li><b>중복</b> weekly 기발송 영상 자동 dedup (history 기반)</li>
         {exclude_channels_li}
@@ -2029,8 +2050,12 @@ def main():
         "MAX_VIEWS": CFG.get("MAX_VIEWS", 0),
         "MIN_VIEWS": CFG.get("MIN_VIEWS", 0),
         "MAX_SHORTS_PER_CHANNEL": CFG.get("MAX_SHORTS_PER_CHANNEL", 0),
-        "MAX_DURATION_SEC": CFG.get("MAX_DURATION_SEC", 0),
-        "MIN_DURATION_SEC": CFG.get("MIN_DURATION_SEC", 0),
+        # MAX_DURATION_SEC 는 target 별로 None(상한 없음) 이 유효. dict.get default 0
+        # 을 쓰면 이미 저장된 None 을 그대로 반환하고 이후 렌더에서 "None초 이하" 문구가
+        # 나오는 버그가 있었음. 원본 값을 그대로 저장하고 렌더 시 _render_duration_label
+        # 이 None 을 명시적으로 "상한 없음" 으로 처리한다.
+        "MAX_DURATION_SEC": CFG.get("MAX_DURATION_SEC"),
+        "MIN_DURATION_SEC": CFG.get("MIN_DURATION_SEC") or 0,
         # 업로드 age 필터 (사용자-facing "업로드 직후 ~ N일" / "M일 초과 ~ N일" 표시용).
         # MIN_AGE_DAYS_EXCLUSIVE 는 standard=30, recent=None. 반드시 스냅샷 포함해야
         # render_report 의 필터 기준 문구가 profile 별로 정확히 표시됨.
