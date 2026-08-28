@@ -2,10 +2,12 @@ name: 매주 금 Weekly Bundle (털어드림/묘한덕질/짤덕방)
 
 # (2026-08-25 신설) 3 target × mode=weekly 통합 리포트 · Gmail 1통 · 첨부 3개.
 #
-# 실행 시각: 매주 금 08:42 KST = 목요일 23:42 UTC.
+# 실행 시각: 매주 금 08:17 KST = 목요일 23:17 UTC.
 #   이전 monday_recent.yml 의 월/수/금 3회 실행은 사용자 지시로 금요일 1회로 변경.
+#   (2026-08-28) GitHub Actions schedule 지연 가능성 대비 운영 여유 확보를 위해
+#   08:42 → 08:17 로 25분 앞당김. 격주 Standard(weekly.yml) 도 08:47 → 08:23 으로 동시 이동.
 #
-# concurrency group teoldeurim-mailer 를 격주 금 Standard(weekly.yml, 08:47 KST) 와
+# concurrency group teoldeurim-mailer 를 격주 금 Standard(weekly.yml, 08:23 KST) 와
 # 공유해 큐 대기 → Weekly Bundle 완료 후 Standard 순차 실행. push race 완전 회피.
 #
 # 발송 규칙:
@@ -15,10 +17,12 @@ name: 매주 금 Weekly Bundle (털어드림/묘한덕질/짤덕방)
 #
 # (2026-08-26 운영 전환) 2026-08-26 08:42 KST 임시 테스트 실행에서 메일 수신·첨부
 # 정상 확인. RECIPIENT_EMAIL_SELF → RECIPIENT_EMAIL / TEST_MODE 제거 / 임시 수요일
-# cron·날짜 guard 제거 완료. 이제부터 매주 금 08:42 KST 정식 운영.
+# cron·날짜 guard 제거 완료.
+# (2026-08-28) GitHub Actions schedule 지연 가능성 대비 운영 여유 확보를 위해
+# 08:42 → 08:17 로 25분 앞당김.
 on:
   schedule:
-    - cron: '42 23 * * 4'   # 목요일 23:42 UTC = 금요일 08:42 KST (정식 운영)
+    - cron: '17 23 * * 4'   # 목요일 23:17 UTC = 금요일 08:17 KST (정식 운영)
   workflow_dispatch:
     inputs:
       recipient_override:

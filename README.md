@@ -2,8 +2,8 @@
 
 K-pop Shorts 채널 **털어드림 · 묘한덕질 · 짤덕방** 세 채널의 콘텐츠 소싱을 자동화하는 공용 Benchmark 엔진.
 
-- **Weekly Bundle** — 매주 금요일 08:42 KST · 3 target 각각 Benchmark 리포트를 생성해 첨부 3개를 **한 통의 메일**로 발송.
-- **털어드림 Standard** — 격주 금요일 08:47 KST (ISO 홀수 주차) · 털어드림 전용 · 별도 메일 1통 (첨부 1개).
+- **Weekly Bundle** — 매주 금요일 08:17 KST · 3 target 각각 Benchmark 리포트를 생성해 첨부 3개를 **한 통의 메일**로 발송.
+- **털어드림 Standard** — 격주 금요일 08:23 KST (ISO 홀수 주차) · 털어드림 전용 · 별도 메일 1통 (첨부 1개).
 - **공용 엔진 · target profile 분리** — `scripts/benchmark.py` 하나가 `config/targets/{slug}.py` 를 target profile 로 로드해 identity · Reference 채널 · Hard filter · Claude prompt 를 주입받아 target 무관하게 동작.
 
 > 📌 Claude Code로 이 프로젝트를 이어서 작업한다면 **`CLAUDE.md`** 를 먼저 읽으세요. `docs/` 하위 문서는 legacy 시점 기준이므로 참고 정도로만.
@@ -14,7 +14,7 @@ K-pop Shorts 채널 **털어드림 · 묘한덕질 · 짤덕방** 세 채널의 
 
 ### 매주 금 Weekly Bundle (`weekly_bundle.yml`)
 
-- **cron**: `42 23 * * 4` (목 23:42 UTC = **금 08:42 KST**)
+- **cron**: `17 23 * * 4` (목 23:17 UTC = **금 08:17 KST**)
 - **파이프라인**: `send_report.py --mode=weekly-bundle`
   1. `benchmark.py` 를 target=teoldeurim / myohanduk / jjalduk 각각 `MODE=weekly` 로 순차 실행
   2. 3 target 모두 성공 시에만 Gmail 1회 · 첨부 3개 (실패 target 이 하나라도 있으면 발송 skip · sent history 기록 skip)
@@ -23,7 +23,7 @@ K-pop Shorts 채널 **털어드림 · 묘한덕질 · 짤덕방** 세 채널의 
 
 ### 격주 금 털어드림 Standard (`weekly.yml`)
 
-- **cron**: `47 23 * * 4` (목 23:47 UTC = **금 08:47 KST**) · ISO 홀수 주차만 실행
+- **cron**: `23 23 * * 4` (목 23:23 UTC = **금 08:23 KST**) · ISO 홀수 주차만 실행
 - **파이프라인**: `send_report.py --mode=friday` — target=teoldeurim + MODE=standard 단독 실행 → HTML 그대로 발송
 - Weekly Bundle 과 concurrency group `teoldeurim-mailer` 공유 → Bundle 완료 후 Standard 순차 실행
 
