@@ -129,6 +129,7 @@ TARGET = {
         {"name": "로로단",       "channel": "https://www.youtube.com/@로로단"},
         {"name": "애명",         "channel": "https://www.youtube.com/@ygeverythingyg"},
         {"name": "아이돌탐정",   "channel": "https://www.youtube.com/@IDOL탐정"},
+        {"name": "K챱챱",  "channel": "https://www.youtube.com/@K챱챱"},
     ],
 
     "modes": {
