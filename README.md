@@ -177,15 +177,18 @@ Actions 탭 → 워크플로 선택 → **Run workflow**
 
 ## 비용 (Apify 예상 · Claude 별도)
 
-**아래 금액은 Apify 부분만의 예상값이며 Claude API 비용은 별도입니다.** Standard 는 첫 정식 실행 (2026-08-28 예정) 전이므로 실측이 아닌 참고 예상값입니다.
+**아래 금액은 Apify 부분만의 예상값이며 Claude API 비용은 별도입니다.** 주별 참고 채널 업로드량에 따라 실제 수집 item 수가 달라지므로 ±20% 수준 변동 가능.
 
-### Apify (discovery-only 기준)
+### Apify (discovery-only · Weekly 는 서버측 8일 pre-filter 적용 후)
 
 | 항목 | Apify 실행 | Apify 예상 (USD) |
 |---|---|---|
-| Weekly Bundle 1회 | discovery 3 runs (target 당 1회) | ~$2.32 (Weekly Bundle 첫 실측 · 2026-08-26 아침 실행 기준) |
-| Standard 1회 | discovery 1 run | ~$1.05 (**Standard production 실측 전 · 참고값**) |
-| Apify 월간 예상 (Weekly 4회 + Standard 2회) |  | **~$11 (Apify 만)** |
+| Weekly Bundle 1회 (이전 · pre-filter 없음) | discovery 3 runs | ~$2.45 (10/02·10/09 실측) |
+| **Weekly Bundle 1회 (현재 · 8일 pre-filter 적용)** | discovery 3 runs + `oldestPostDate` | **~$0.36 (2026-10-13 테스트 실측 기준)** |
+| Standard 1회 | discovery 1 run | ~$1.05 (2026-10-09 실측) |
+| **Apify 월간 예상 (Weekly 4회 + Standard 2회 합산 · 전체)** |  | **~$3.5** (참고: pre-filter 적용 전 전체 ~$11.8) |
+
+> `oldestPostDate` 는 Weekly profile 에만 적용되는 서버측 1차 날짜 필터로, Python Hard filter 의 정확한 7일 조건은 그대로 유지됩니다. 상세 설계는 `config/targets/*.py` 의 `APIFY_COLLECTION_LOOKBACK_DAYS` 참고.
 
 ### Claude API (별도 · `claude-opus-4-7`)
 
@@ -202,7 +205,6 @@ Actions 탭 → 워크플로 선택 → **Run workflow**
 
 - GitHub Actions · Gmail SMTP · Python 무료
 - **실 청구액은 Apify / Anthropic 콘솔에서 별도 확인**
-- Standard 월간 실 비용은 2026-08-28 첫 정식 실행 이후 재산정
 
 ---
 

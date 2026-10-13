@@ -193,6 +193,11 @@ TARGET = {
         "weekly": {
             "SORT_BY": "NEWEST",
             "MAX_SHORTS_PER_CHANNEL": 50,
+            # (2026-10-13) Apify discovery actor 서버측 oldestPostDate 1차 필터.
+            # 8일 = Weekly Python Hard filter 의 "7일 이내" + 1일 안전 마진.
+            # 서버가 하루 단위로 자르는 특성 + 당일 영상 일부 미반환 issue 때문에 8일.
+            # 실측상 7일로 좁히면 유효 영상 손실 발생. 이후 기존 hard_filter 가 정확한 7일 재적용.
+            "APIFY_COLLECTION_LOOKBACK_DAYS": 8,
             "MIN_VIEWS": 50_000,
             "MAX_VIEWS": 3_000_000,
             "MAX_VIEWS_INCLUSIVE": True,
@@ -208,6 +213,9 @@ TARGET = {
         "standard": {
             "SORT_BY": "POPULAR",
             "MAX_SHORTS_PER_CHANNEL": 50,
+            # Standard 는 365일 범위라 서버측 pre-filter 효과 미미. None 유지로
+            # oldestPostDate 전달하지 않음 (기존 수집 방식 100% 보존).
+            "APIFY_COLLECTION_LOOKBACK_DAYS": None,
             "MIN_VIEWS": 500_000,
             "MAX_VIEWS": 9_000_000,
             "MAX_VIEWS_INCLUSIVE": True,      # (2026-08-25) exclusive → inclusive 로 통일

@@ -151,8 +151,8 @@ chk("PROF-JJ-07: jjalduk 정보성 부정 신호 = Hard rule 아님 명시",
 chk("PROF-JJ-08: jjalduk angle_field_label = 짤덕방식 활용 각도",
     jj["identity"]["angle_field_label"] == "짤덕방식 활용 각도")
 
-chk("PROF-MH-01: myohanduk reference_channels 6개",
-    len(mh["reference_channels"]) == 6)
+chk("PROF-MH-01: myohanduk reference_channels 7개 (2026-08-28 K챱챱 추가 반영)",
+    len(mh["reference_channels"]) == 7)
 chk("PROF-MH-02: myohanduk MAX_DURATION_SEC = None",
     mh["modes"]["weekly"]["MAX_DURATION_SEC"] is None)
 chk("PROF-MH-03: myohanduk MAX_ANALYSIS = 30, FINAL = 5 (모든 target 30/5 통일)",

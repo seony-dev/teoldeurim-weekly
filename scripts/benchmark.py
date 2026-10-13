@@ -216,10 +216,15 @@ def http_json(url, data=None, method="GET", timeout=60):
         raise RuntimeError(f"HTTP {e.code} {e.reason} — {detail[:300]}") from None
 
 
-def apify_collect(token, channels, max_per_channel, sort_by):
+def apify_collect(token, channels, max_per_channel, sort_by, lookback_days=None):
     """Apify 액터를 실행해 채널별 인기 Shorts를 수집한다.
 
     비동기로 실행한 뒤 상태를 폴링하고, 완료되면 데이터셋 아이템을 반환.
+
+    (2026-10-13) `lookback_days` 가 지정되면 `oldestPostDate` 서버측 필터를 전달해
+    수집 범위를 줄인다. Weekly profile 에서는 8일 (= 7일 최종 필터 + 1일 안전 마진)
+    로 설정해 Apify 비용을 ~85% 절감. Standard 는 365일 범위라 None 유지 (서버 필터
+    적용 시 추가 비용만 발생하고 효과 미미).
     """
     actor_id = CFG.get("APIFY_DISCOVERY_ACTOR") or CFG.get("APIFY_ACTOR")
     actor_path = actor_id.replace("/", "~")
@@ -228,9 +233,19 @@ def apify_collect(token, channels, max_per_channel, sort_by):
         "maxResultsShorts": max_per_channel,
         "sortChannelShortsBy": sort_by,
     }
+    # Weekly 전용: oldestPostDate 서버측 날짜 필터 (date-only, YYYY-MM-DD).
+    # 서버 cutoff 는 하루 단위라 Python Hard filter (실행시점 - 7d) 보다 넉넉해야
+    # 유효 영상 손실이 없다. 실측상 8일 마진이면 손실 0건, 7일로는 teoldeurim 쪽에
+    # 몇 건 손실 발생 (서버가 당일 영상 상당수 미반환하는 undocumented 동작).
+    oldest_label = None
+    if lookback_days is not None:
+        oldest_date = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+        run_input["oldestPostDate"] = oldest_date
+        oldest_label = f" / oldestPostDate={oldest_date} (lookback {lookback_days}d)"
 
     print(f"  [Apify] 액터 실행: {actor_id}")
-    print(f"  [Apify] 채널 {len(channels)}개 / 채널당 최대 {max_per_channel}개 / 정렬 {sort_by}")
+    print(f"  [Apify] 채널 {len(channels)}개 / 채널당 최대 {max_per_channel}개 / 정렬 {sort_by}"
+          f"{oldest_label or ''}")
 
     start_url = f"https://api.apify.com/v2/acts/{actor_path}/runs?token={quote(token)}"
     run = http_json(start_url, data=run_input, method="POST", timeout=60)["data"]
@@ -1970,7 +1985,8 @@ def main():
         if c:
             channels.append(c)
     raw_items = apify_collect(apify_token, channels,
-                              CFG["MAX_SHORTS_PER_CHANNEL"], CFG["SORT_BY"])
+                              CFG["MAX_SHORTS_PER_CHANNEL"], CFG["SORT_BY"],
+                              lookback_days=CFG.get("APIFY_COLLECTION_LOOKBACK_DAYS"))
 
     videos = [normalize_video(it) for it in raw_items]
     # 중복 영상 제거 (video_id 기준)

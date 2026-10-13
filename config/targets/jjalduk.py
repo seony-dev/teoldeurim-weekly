@@ -119,6 +119,10 @@ TARGET = {
         "weekly": {
             "SORT_BY": "NEWEST",
             "MAX_SHORTS_PER_CHANNEL": 50,
+            # (2026-10-13) Apify discovery actor 서버측 oldestPostDate 1차 필터.
+            # 8일 = Weekly Python Hard filter 의 "7일 이내" + 1일 안전 마진.
+            # 이후 기존 hard_filter 가 정확한 7일 재적용.
+            "APIFY_COLLECTION_LOOKBACK_DAYS": 8,
             "MIN_VIEWS": 100_000,
             "MAX_VIEWS": 3_000_000,
             "MAX_VIEWS_INCLUSIVE": True,
