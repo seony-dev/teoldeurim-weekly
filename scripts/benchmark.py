@@ -277,6 +277,68 @@ def apify_collect(token, channels, max_per_channel, sort_by, lookback_days=None)
 
 
 
+def _is_valid_video_item(item):
+    """Apify shorts-scraper raw item 이 유효한 video 레코드인지 판정.
+
+    (2026-10-16) `oldestPostDate` 서버측 필터 사용 시 Actor 가 수집 범위
+    (현재 8일) 내 신규 Shorts 가 0개인 채널에 대해 아래 형태의 '에러 메타 레코드'
+    를 dataset 에 넣는 것이 실측으로 확인됨:
+      {
+        "aboutChannelInfo": {...채널 메타...},
+        "url": "https://www.youtube.com/@{channel}/shorts",
+        "error": "DATE_FILTER_TOO_STRICT",
+        "input": "https://www.youtube.com/@{channel}",
+        "note": "No videos were collected due to date filtering."
+      }
+    이런 레코드는 `id` / `videoId` / `shortId` 세 키 중 어느 것도 실제 값 (non-empty)
+    을 갖지 않는다.
+
+    정상 Shorts item 은 실측상 반드시 id (또는 videoId / shortId 중 하나) 가
+    실제 값으로 존재하므로, 이 세 키 중 하나라도 **truthy** 하면 유효 video 로
+    판정, 전부 falsy (키 자체 부재 · None · 빈 문자열 등) 이면 malformed.
+
+    판정 기준은 "키 존재 여부" 가 아니라 "실제 non-empty 값 존재 여부" 다
+    (`dict.get(k)` 가 falsy 를 반환하는 모든 경우가 invalid).
+
+    title 유무로는 판정하지 않는다 (정상 영상의 title 이 빈 경우가 있을 수 있음).
+    """
+    for k in ("id", "videoId", "shortId"):
+        v = item.get(k)
+        # 실제 non-empty 값만 valid 로 인정 (None / "" / 0 / [] 등 falsy 는 invalid)
+        if v:
+            return True
+    return False
+
+
+def drop_malformed_items(raw_items):
+    """Apify raw items 중 유효 video 가 아닌 레코드 (Actor 가 내려주는 에러 메타 등)
+    를 normalize 이전에 조기 제거.
+
+    반환: (clean_items, dropped_items)
+      · clean_items   : 유효 video 레코드만 (collected / Hard 컷 / Claude 등 이후 단계로 전달)
+      · dropped_items : 걸러진 레코드 (로그/진단 전용 · pipeline 에는 전달하지 않음)
+    """
+    clean, dropped = [], []
+    for it in raw_items:
+        if _is_valid_video_item(it):
+            clean.append(it)
+        else:
+            dropped.append(it)
+    return clean, dropped
+
+
+def _describe_dropped_item(it):
+    """제거된 레코드의 error reason + 대상 채널명을 사람이 읽을 수 있게 포맷."""
+    err = it.get("error") or "(error 필드 없음)"
+    about = it.get("aboutChannelInfo") or {}
+    ch = (about.get("channelName")
+          or about.get("inputChannelUrl")
+          or it.get("input")
+          or it.get("url")
+          or "(채널 미상)")
+    return f"{err} · 채널: {ch}"
+
+
 def normalize_video(item):
     """Apify discovery actor 의 원본 아이템을 일관된 dict 로 변환.
 
@@ -1987,6 +2049,18 @@ def main():
     raw_items = apify_collect(apify_token, channels,
                               CFG["MAX_SHORTS_PER_CHANNEL"], CFG["SORT_BY"],
                               lookback_days=CFG.get("APIFY_COLLECTION_LOOKBACK_DAYS"))
+
+    # (2026-10-16) Apify 가 "8일 수집 범위 내 신규 Shorts 0" 인 채널에 대해 내려주는
+    # 에러 메타 레코드 (DATE_FILTER_TOO_STRICT 등) 를 normalize 이전에 조기 제거.
+    # id/videoId/shortId 중 하나도 non-empty 값이 아니면 malformed 로 간주
+    # (키 존재 여부가 아니라 실제 값 존재 여부로 판정, title 유무로는 판정 X).
+    # 제거된 레코드는 collected / Hard 컷 count 에 포함되지 않고 로그에만 사유·채널 표시.
+    raw_items, _dropped_items = drop_malformed_items(raw_items)
+    if _dropped_items:
+        print(f"\n[STEP 1.5] Apify malformed item 사전 제거: "
+              f"{len(_dropped_items)}건 (8일 수집 범위 내 신규 Shorts 0 등)")
+        for _it in _dropped_items:
+            print(f"  · {_describe_dropped_item(_it)}")
 
     videos = [normalize_video(it) for it in raw_items]
     # 중복 영상 제거 (video_id 기준)

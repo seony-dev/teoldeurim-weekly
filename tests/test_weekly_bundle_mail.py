@@ -78,7 +78,7 @@ _run_results.update({
 # tmp_dir 필수 인자 (실제 fs 안 씀)
 tmp = ROOT / "local_output"
 tmp.mkdir(exist_ok=True)
-send_report.run_weekly_bundle("2026-09-04", tmp, dry_run=False)
+send_report.run_weekly_bundle("2099-09-04", tmp, dry_run=False)
 
 chk("OK-01: Gmail send_email 정확히 1회 호출",
     len(_send_calls) == 1, f"got {len(_send_calls)}")
@@ -88,11 +88,11 @@ chk("OK-02: attachment_html 은 첫 target(teoldeurim) HTML",
 chk("OK-03: extra_attachments 는 2개 (myohanduk + jjalduk)",
     len(call["extra_attachments"]) == 2)
 chk("OK-04: 두 번째 첨부 = myohanduk",
-    call["extra_attachments"][0][0].startswith("myohanduk_weekly_2026-09-04"))
+    call["extra_attachments"][0][0].startswith("myohanduk_weekly_2099-09-04"))
 chk("OK-05: 세 번째 첨부 = jjalduk",
-    call["extra_attachments"][1][0].startswith("jjalduk_weekly_2026-09-04"))
-chk("OK-06: attachment_filename = teoldeurim_weekly_2026-09-04.html",
-    call["attachment_filename"] == "teoldeurim_weekly_2026-09-04.html")
+    call["extra_attachments"][1][0].startswith("jjalduk_weekly_2099-09-04"))
+chk("OK-06: attachment_filename = teoldeurim_weekly_2099-09-04.html",
+    call["attachment_filename"] == "teoldeurim_weekly_2099-09-04.html")
 chk("OK-07: subject 에 3개 채널 카운트 포함",
     "2건" in call["subject"] and "1건" in call["subject"] and "3건" in call["subject"],
     f"subject={call['subject']!r}")
@@ -125,7 +125,7 @@ _run_results.update({
 
 _raised = False
 try:
-    send_report.run_weekly_bundle("2026-09-04", tmp, dry_run=False)
+    send_report.run_weekly_bundle("2099-09-04", tmp, dry_run=False)
 except RuntimeError as e:
     _raised = True
     err_msg = str(e)
@@ -150,7 +150,7 @@ _run_results.update({
     "myohanduk":  {"html": "<html>mh</html>", "video_ids": ["v2"], "raw_path": Path()},
     "jjalduk":    {"html": "<html>jj</html>", "video_ids": ["v3"], "raw_path": Path()},
 })
-send_report.run_weekly_bundle("2026-09-04", tmp, dry_run=True)
+send_report.run_weekly_bundle("2099-09-04", tmp, dry_run=True)
 chk("DRY-01: DRY_RUN 에서 send_email 호출 0회",
     len(_send_calls) == 0)
 chk("DRY-02: DRY_RUN 에서 sent history 기록 0회 (production 오염 방지)",
@@ -167,7 +167,7 @@ _run_results.update({
     "myohanduk":  {"html": "<html>mh</html>", "video_ids": [], "raw_path": Path()},
     "jjalduk":    {"html": "<html>jj</html>", "video_ids": [], "raw_path": Path()},
 })
-send_report.run_weekly_bundle("2026-09-04", tmp, dry_run=False)
+send_report.run_weekly_bundle("2099-09-04", tmp, dry_run=False)
 chk("ZERO-01: 3개 모두 0건이어도 send_email 1회 호출 (0건 알림)",
     len(_send_calls) == 1)
 chk("ZERO-02: subject 에 '신규 후보 없음'",
@@ -210,7 +210,7 @@ def _spy_record(*args, **kwargs):
     return r
 send_report._record_benchmark_sent = _spy_record
 
-send_report.run_weekly_bundle("2026-09-04", tmp, dry_run=False)
+send_report.run_weekly_bundle("2099-09-04", tmp, dry_run=False)
 
 chk("TEST-01: send_email 1회 호출 (실 발송 자체는 정상)",
     len(_send_calls) == 1)
@@ -225,8 +225,8 @@ chk("TEST-04: 모든 record 결과 None (TEST_MODE skip)",
 # 실 파일 시스템에 새 파일 생성 안 됨 확인 — target namespace 디렉토리 미생성
 for slug in ("teoldeurim", "myohanduk", "jjalduk"):
     ns = _saved_root / slug
-    fresh = [f for f in ns.glob("2026-09-04_*.json") if f.is_file()] if ns.exists() else []
-    chk(f"TEST-05[{slug}]: TEST_MODE 실행 후 2026-09-04 신규 파일 없음",
+    fresh = [f for f in ns.glob("2099-09-04_*.json") if f.is_file()] if ns.exists() else []
+    chk(f"TEST-05[{slug}]: TEST_MODE 실행 후 2099-09-04 신규 파일 없음",
         len(fresh) == 0, f"unexpected files: {fresh}")
 
 _os.environ.pop("TEST_MODE", None)
