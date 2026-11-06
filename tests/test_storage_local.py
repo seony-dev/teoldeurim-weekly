@@ -26,8 +26,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "config"))
 
-os.environ.pop("SENT_HISTORY_BACKEND", None)
-os.environ.pop("TEST_MODE", None)
+for _k in ("SENT_HISTORY_BACKEND", "SENT_HISTORY_GCS_BUCKET", "STATE_NAMESPACE", "TEST_MODE"):
+    os.environ.pop(_k, None)
 
 import storage
 import benchmark
@@ -119,14 +119,17 @@ with tempfile.TemporaryDirectory() as td:
         chk(f"BACKEND-{label}: LocalSentHistoryStore 반환",
             isinstance(s, storage.LocalSentHistoryStore))
 
-    for val in ("gcs", "GCS", "s3", "firestore"):
+    # gcs 는 Phase 2A 에서 구현됨 — bucket 미설정이면 설정 오류 (local 로 fallback 하지 않음)
+    for val, exc in (("gcs", storage.StorageConfigError), ("GCS", storage.StorageConfigError),
+                     ("s3", storage.UnsupportedStorageBackend),
+                     ("firestore", storage.UnsupportedStorageBackend)):
         os.environ["SENT_HISTORY_BACKEND"] = val
         raised = False
         try:
             storage.get_store(sent_root=td)
-        except storage.UnsupportedStorageBackend:
+        except exc:
             raised = True
-        chk(f"BACKEND-UNSUPPORTED[{val}]: local fallback 없이 오류", raised)
+        chk(f"BACKEND-UNSUPPORTED[{val}]: local fallback 없이 오류 ({exc.__name__})", raised)
     os.environ.pop("SENT_HISTORY_BACKEND", None)
 
 
@@ -294,9 +297,9 @@ with tempfile.TemporaryDirectory() as td:
         raised = False
         try:
             send_report._record_benchmark_sent("weekly", "2099-01-07", ["a"], target_slug="jjalduk")
-        except storage.UnsupportedStorageBackend:
+        except storage.StorageConfigError:
             raised = True
-        chk("REC-09: backend=gcs → 오류 + 파일 미생성 (local 로 조용히 저장하지 않음)",
+        chk("REC-09: backend=gcs (bucket 미설정) → 오류 + 파일 미생성 (local 로 조용히 저장하지 않음)",
             raised and not (sent_root / "jjalduk" / "2099-01-07_weekly.json").exists())
     finally:
         os.environ.pop("SENT_HISTORY_BACKEND", None)

@@ -206,6 +206,21 @@ def _run_child(script, extra_env, timeout=1200):
 
 
 # ============================================================================
+# Cloud Run 실행 경로(EXECUTION_STATE_KEY)의 저장 실패 — 리포트 수신자에게 오류 메일을 보내지 않는다
+# ============================================================================
+class ExecutionPersistenceError(RuntimeError):
+    """friday_orchestrator 경유 실행에서 상태·sent history 저장 실패. 재발송 판단은 status 로 한다."""
+
+
+class ExecutionStateError(ExecutionPersistenceError):
+    """execution state(status/marker) 기록 실패."""
+
+
+def _execution_state_key():
+    return (os.environ.get("EXECUTION_STATE_KEY") or "").strip()
+
+
+# ============================================================================
 # benchmark sent history 저장 (발송 성공 후에만)
 # ============================================================================
 def _record_benchmark_sent(profile, date_slug, video_ids, target_slug=None):
@@ -225,7 +240,6 @@ def _record_benchmark_sent(profile, date_slug, video_ids, target_slug=None):
     if not video_ids:
         _log("  ⚠️ 기록할 video_id 없음 (발송 후보 0개) — sent history 저장 skip")
         return None
-    store = storage.get_store(sent_root=ROOT / benchmark_config.BENCHMARK_SENT_HISTORY_DIR)
     payload = {
         "date_kst": date_slug,
         "profile": profile,
@@ -234,9 +248,51 @@ def _record_benchmark_sent(profile, date_slug, video_ids, target_slug=None):
         "candidates_video_ids": list(video_ids),
         "count": len(video_ids),
     }
-    p = store.write_sent(f"{date_slug}_{profile}.json", payload, target_slug=target_slug)
-    _log(f"  💾 benchmark sent history 저장: {p.relative_to(ROOT)}")
+    name = f"{date_slug}_{profile}.json"
+    try:
+        store = storage.get_store(sent_root=ROOT / benchmark_config.BENCHMARK_SENT_HISTORY_DIR)
+        p = store.write_sent(name, payload, target_slug=target_slug)
+    except Exception as e:
+        if not _execution_state_key():
+            raise  # GitHub/local 경로: 기존 오류 처리(오류 메일) 그대로
+        raise ExecutionPersistenceError(
+            f"sent history 기록 실패: {target_slug or '(flat)'}/{name} ({type(e).__name__}: {e})"
+        ) from e
+    _log(f"  💾 benchmark sent history 저장: {p.relative_to(ROOT) if isinstance(p, Path) else p}")
     return p
+
+
+# ============================================================================
+# SMTP lifecycle 상태 기록 (friday_orchestrator 경유 실행에서만 동작)
+# ============================================================================
+def _execution_state(state, sent_history_plan=None):
+    """EXECUTION_STATE_KEY 가 있을 때만 status/marker 를 기록. 없으면 no-op (GitHub Actions 경로 무변화).
+
+    sending  : send_email() 호출 직전
+    sent     : send_email() 성공 반환 직후
+    completed: sent history 기록 후 — marker(create-if-absent) 먼저, 그다음 status
+    sent_history_plan 은 ambiguous 상태에서 운영자가 sent history 를 복구할 수 있도록 status 에 남긴다.
+    상태 저장소 오류는 ExecutionStateError 로 감싼다 (main 에서 수신자 오류 메일 없이 종료).
+    """
+    key = _execution_state_key()
+    if not key:
+        return
+    run_id = (os.environ.get("EXECUTION_RUN_ID") or "").strip() or None
+    try:
+        store = storage.get_state_store()
+        if state == "completed":
+            store.create_marker(key, {
+                "key": key,
+                "run_id": run_id,
+                "completed_at_utc": datetime.now(timezone.utc).isoformat(),
+            })
+        extra = {"sent_history_plan": sent_history_plan} if sent_history_plan is not None else None
+        store.write_status(key, state, run_id=run_id, extra=extra)
+    except Exception as e:
+        raise ExecutionStateError(
+            f"execution state 기록 실패: {key} → {state} ({type(e).__name__}: {e})"
+        ) from e
+    _log(f"  🧭 execution state: {key} → {state}")
 
 
 def _load_benchmark_result_ids(raw_json_path):
@@ -561,6 +617,9 @@ def run_weekly_bundle(date_slug, tmp_dir, dry_run=False):
 
     env = _env_snapshot()
     _log(f"\n📮 [weekly-bundle] 발송 → {env['RECIPIENT_EMAIL']} (첨부 {len(results)}개)")
+    sent_plan = [{"profile": "weekly", "date_slug": date_slug, "target_slug": r["slug"],
+                  "video_ids": list(r["data"]["video_ids"])} for r in results]
+    _execution_state("sending", sent_plan)
     send_email(
         env,
         subject=subject,
@@ -570,11 +629,13 @@ def run_weekly_bundle(date_slug, tmp_dir, dry_run=False):
         extra_attachments=extras,
     )
     _log("  ✅ 발송 완료")
+    _execution_state("sent", sent_plan)
 
     # 발송 성공 후에만 각 target sent history 기록
     for r in results:
         _record_benchmark_sent("weekly", date_slug, r["data"]["video_ids"],
                                target_slug=r["slug"])
+    _execution_state("completed", sent_plan)
 
 
 # ============================================================================
@@ -648,6 +709,9 @@ def run_friday(date_slug, tmp_dir, dry_run=False):
 
     env = _env_snapshot()
     _log(f"\n📮 [friday standard] 발송 → {env['RECIPIENT_EMAIL']}")
+    sent_plan = [{"profile": profile, "date_slug": date_slug, "target_slug": target_slug,
+                  "video_ids": list(bm_video_ids)}]
+    _execution_state("sending", sent_plan)
     send_email(
         env,
         subject=subject,
@@ -656,10 +720,12 @@ def run_friday(date_slug, tmp_dir, dry_run=False):
         attachment_filename=f"teoldeurim_standard_{date_slug}.html",
     )
     _log("  ✅ 발송 완료")
+    _execution_state("sent", sent_plan)
 
     # 발송 성공 후 sent history 기록 — 신규 namespaced 위치에 저장
     _record_benchmark_sent(profile, date_slug, bm_video_ids,
                            target_slug=target_slug)
+    _execution_state("completed", sent_plan)
 
 
 # ============================================================================
@@ -705,6 +771,12 @@ def main():
         elif args.mode == "weekly-bundle":
             run_weekly_bundle(date_slug, tmp_dir, dry_run=dry_run)
         _log("\n✅ orchestrator 완료")
+    except ExecutionPersistenceError as e:
+        # Cloud Run 경로의 저장(상태·sent history) 장애는 리포트 수신자에게 알리지 않는다.
+        # 재발송 여부는 남은 status 를 보고 friday_orchestrator 가 판단한다.
+        print(f"⛔ {e}\n   리포트 수신자 오류 메일은 보내지 않습니다 (mode={args.mode}).\n\n"
+              f"{traceback.format_exc()}", file=sys.stderr, flush=True)
+        sys.exit(1)
     except Exception as e:
         err = f"orchestrator 실행 실패:\n\n{e}\n\n{traceback.format_exc()}"
         _log(err)
