@@ -53,6 +53,7 @@ HISTORY_DIR = ROOT / "history"  # weekly.py 산출물 — 읽기 전용으로만
 # config/benchmark_config.py 로드
 sys.path.insert(0, str(ROOT / "config"))
 import benchmark_config  # noqa: E402
+import storage  # noqa: E402
 
 # CFG는 프로파일 미확정 상태의 기본값(=standard 필드가 이미 포함된 BENCHMARK_CONFIG).
 # main() 시작 시 PROFILE env 기준으로 resolve_config() 결과를 CFG에 병합함.
@@ -501,6 +502,13 @@ def validate_reference_channels(refs):
 # 은 사용자 지시로 완전히 제거되었습니다. 아래 loader 는 오직 sent dedup 용으로만
 # history 를 읽습니다.
 # ============================================================================
+def _sent_history_store():
+    return storage.get_store(
+        sent_root=ROOT / benchmark_config.BENCHMARK_SENT_HISTORY_DIR,
+        legacy_weekly_dir=HISTORY_DIR,
+    )
+
+
 def _load_legacy_weekly_history_sent_ids():
     """(털어드림 legacy) history/*.json 에서 발송된 candidates 의 video_id 집합.
 
@@ -508,13 +516,12 @@ def _load_legacy_weekly_history_sent_ids():
     읽는다. 묘한덕질/짤덕방 등 신규 target 은 이 함수를 호출하지 않는다.
     """
     result = set()
-    if not HISTORY_DIR.exists():
-        return result
-    for f in sorted(HISTORY_DIR.glob("*.json")):
+    store = _sent_history_store()
+    for name in store.list_legacy_weekly():
         try:
-            d = json.loads(f.read_text(encoding="utf-8"))
+            d = store.read_legacy_weekly(name)
         except Exception as e:
-            print(f"  ⚠️ legacy weekly history 읽기 실패 {f.name}: {e}")
+            print(f"  ⚠️ legacy weekly history 읽기 실패 {name}: {e}")
             continue
         for it in (d.get("candidates") or []):
             vid = it.get("video_id")
@@ -531,17 +538,15 @@ def _load_flat_benchmark_sent_ids():
     털어드림의 과거 발송 dedup 을 유지하기 위해 flat 파일들도 함께 읽는다.
     """
     result = set()
-    root_dir = ROOT / benchmark_config.BENCHMARK_SENT_HISTORY_DIR
-    if not root_dir.exists():
-        return result
+    store = _sent_history_store()
     _flat_pat = re.compile(r"^\d{4}-\d{2}-\d{2}_(standard|recent)\.json$")
-    for f in sorted(root_dir.glob("*.json")):
-        if not _flat_pat.match(f.name):
+    for name in store.list_legacy_flat():
+        if not _flat_pat.match(name):
             continue
         try:
-            d = json.loads(f.read_text(encoding="utf-8"))
+            d = store.read_legacy_flat(name)
         except Exception as e:
-            print(f"  ⚠️ legacy flat benchmark sent 읽기 실패 {f.name}: {e}")
+            print(f"  ⚠️ legacy flat benchmark sent 읽기 실패 {name}: {e}")
             continue
         for vid in (d.get("candidates_video_ids") or []):
             if vid:
@@ -556,14 +561,12 @@ def _load_namespaced_sent_ids(target_slug):
     namespace 파일만 참조.
     """
     result = set()
-    ns_dir = ROOT / benchmark_config.BENCHMARK_SENT_HISTORY_DIR / target_slug
-    if not ns_dir.exists():
-        return result
-    for f in sorted(ns_dir.glob("*.json")):
+    store = _sent_history_store()
+    for name in store.list_namespaced(target_slug):
         try:
-            d = json.loads(f.read_text(encoding="utf-8"))
+            d = store.read_namespaced(target_slug, name)
         except Exception as e:
-            print(f"  ⚠️ namespaced sent history 읽기 실패 {target_slug}/{f.name}: {e}")
+            print(f"  ⚠️ namespaced sent history 읽기 실패 {target_slug}/{name}: {e}")
             continue
         for vid in (d.get("candidates_video_ids") or []):
             if vid:

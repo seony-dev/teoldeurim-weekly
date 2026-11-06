@@ -47,6 +47,7 @@ sys.path.insert(0, str(CONFIG_DIR))
 
 from emailer import send_email, send_error_email, parse_recipients  # noqa: E402
 import benchmark_config  # noqa: E402
+import storage  # noqa: E402
 
 KST = timezone(timedelta(hours=9))
 
@@ -224,13 +225,7 @@ def _record_benchmark_sent(profile, date_slug, video_ids, target_slug=None):
     if not video_ids:
         _log("  ⚠️ 기록할 video_id 없음 (발송 후보 0개) — sent history 저장 skip")
         return None
-    root = ROOT / benchmark_config.BENCHMARK_SENT_HISTORY_DIR
-    if target_slug:
-        sent_dir = root / target_slug
-    else:
-        sent_dir = root
-    sent_dir.mkdir(parents=True, exist_ok=True)
-    p = sent_dir / f"{date_slug}_{profile}.json"
+    store = storage.get_store(sent_root=ROOT / benchmark_config.BENCHMARK_SENT_HISTORY_DIR)
     payload = {
         "date_kst": date_slug,
         "profile": profile,
@@ -239,7 +234,7 @@ def _record_benchmark_sent(profile, date_slug, video_ids, target_slug=None):
         "candidates_video_ids": list(video_ids),
         "count": len(video_ids),
     }
-    p.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    p = store.write_sent(f"{date_slug}_{profile}.json", payload, target_slug=target_slug)
     _log(f"  💾 benchmark sent history 저장: {p.relative_to(ROOT)}")
     return p
 
