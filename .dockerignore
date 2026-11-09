@@ -1,0 +1,9 @@
+# 이미지에는 Dockerfile 이 명시적으로 COPY 하는 requirements*.txt · scripts/ · config/ 만 필요하다.
+*
+!Dockerfile
+!requirements.txt
+!requirements-gcp.txt
+!scripts/
+!config/
+**/__pycache__
+**/*.pyc

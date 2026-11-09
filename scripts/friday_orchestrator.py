@@ -18,9 +18,16 @@ pending 은 이 orchestrator 가, sending/sent/completed 는 send_report.py 가 
 
 lock 은 동시 실행 방지용, status/marker 는 재발송 방지용이다.
 
+실행 mode (--mode, 기본 auto):
+  auto          : 위 1)~6) 흐름 그대로
+  weekly-bundle : Weekly Bundle 만 실행 (Standard 판정·실행 없음)
+  friday        : Standard 만 실행 (Weekly 선행 조건·격주 판정 없음 — 수동 Standard 실행용)
+모든 mode 에서 같은 date lock 과 {date}_{mode} status/marker 를 사용한다.
+
 exit code: 0 정상(중복 실행·skip 포함) · 1 실패(SMTP 이전, 재실행 가능) · 3 ambiguous(수동 확인)
 """
 
+import argparse
 import os
 import subprocess
 import sys
@@ -52,6 +59,9 @@ EXIT_AMBIGUOUS = 3
 MODE_WEEKLY = "weekly-bundle"
 MODE_STANDARD = "friday"
 MODES = (MODE_WEEKLY, MODE_STANDARD)
+
+RUN_AUTO = "auto"
+RUN_MODES = (RUN_AUTO, MODE_WEEKLY, MODE_STANDARD)
 
 # GitHub workflow timeout-minutes 와 동일 (weekly_bundle.yml 60분, weekly.yml 40분)
 MODE_TIMEOUT_SEC = {MODE_WEEKLY: 60 * 60, MODE_STANDARD: 40 * 60}
@@ -309,7 +319,19 @@ def run_friday(store, date_slug, run_id, now, dry_run, runner):
     return EXIT_OK
 
 
-def main(now=None, runner=None, store=None):
+def run_single(store, date_slug, mode, run_id, dry_run, runner):
+    """명시 mode — 해당 mode 하나만 같은 상태 머신으로 실행."""
+    result = run_mode(store, date_slug, mode, run_id, dry_run, runner)
+    if result == AMBIGUOUS:
+        return EXIT_AMBIGUOUS
+    if result == FAILED:
+        return EXIT_FAILED
+    return EXIT_OK
+
+
+def main(now=None, runner=None, store=None, mode=RUN_AUTO):
+    if mode not in RUN_MODES:
+        raise ValueError(f"알 수 없는 mode={mode!r} (지원: {', '.join(RUN_MODES)})")
     send_report._load_dotenv_if_present()
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None or now.tzinfo.utcoffset(now) is None:
@@ -328,7 +350,7 @@ def main(now=None, runner=None, store=None):
     run_id = new_run_id(now)
     _log("=" * 60)
     _log("friday orchestrator")
-    _log(f"now(KST)={now.astimezone(KST):%Y-%m-%d %H:%M:%S}  date_slug={date_slug}  "
+    _log(f"now(KST)={now.astimezone(KST):%Y-%m-%d %H:%M:%S}  date_slug={date_slug}  mode={mode}  "
          f"namespace={store.namespace}  run_id={run_id}" + ("  DRY_RUN" if dry_run else ""))
     _log("=" * 60)
 
@@ -346,7 +368,10 @@ def main(now=None, runner=None, store=None):
     if lock == AMBIGUOUS:
         return EXIT_AMBIGUOUS
     try:
-        return run_friday(store, date_slug, run_id, now, dry_run, runner)
+        if mode == RUN_AUTO:
+            return run_friday(store, date_slug, run_id, now, dry_run, runner)
+        _log(f"▶ 명시 mode={mode} — 이 mode 만 실행 (격주 판정 없음)")
+        return run_single(store, date_slug, mode, run_id, dry_run, runner)
     finally:
         try:
             release_lock(store, date_slug, run_id)
@@ -355,5 +380,12 @@ def main(now=None, runner=None, store=None):
             _err(f"⚠️ lock 해제 실패 ({e}) — {store.uri(store.lock_key(date_slug))} 는 stale 회수 대상으로 남음")
 
 
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description="금요일 정기 실행 orchestrator")
+    parser.add_argument("--mode", choices=RUN_MODES, default=RUN_AUTO,
+                        help="auto(기본): Weekly → 홀수 주 Standard / weekly-bundle: Weekly 만 / friday: Standard 만")
+    return parser.parse_args(argv)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(mode=parse_args().mode))
