@@ -10,9 +10,10 @@ name: 털어드림 격주 Benchmark Standard (금요일)
 # (2026-08-25 리팩터링) send_report.py --mode=friday 는 이제 target=teoldeurim +
 # mode=standard 를 명시적으로 넘겨 benchmark.py 를 호출. 신규 sent history 는
 # benchmark/history/sent/teoldeurim/*.json namespace 에 저장됨.
+# (2026-11-09) 정기 실행은 Cloud Scheduler(매주 금 09:10 KST) → Cloud Run Job
+# teoldeurim-friday-prod 로 이전 (Weekly 후 KST ISO 홀수 주 Standard). schedule 트리거 제거.
+# 수동 실행(workflow_dispatch)은 Cloud Run 실행으로 이전되기 전까지 차단 (manual-guard).
 on:
-  schedule:
-    - cron: '23 23 * * 4'   # 목요일 23:23 UTC = 금요일 08:23 KST
   workflow_dispatch:
     inputs:
       force_rescan:
@@ -41,7 +42,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 수동 실행 차단 — 리포트 생성·메일 발송 없이 안내 후 실패 처리.
+  manual-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 수동 실행 차단 안내
+        run: |
+          echo "::error::Production execution migrated to Cloud Run — manual GitHub execution temporarily disabled"
+          echo "정기 실행: Cloud Scheduler(매주 금 09:10 KST) → Cloud Run Job teoldeurim-friday-prod"
+          echo "Standard 단독 수동 실행이 필요하면 Cloud Run Job 을 --mode=friday 로 execute 하세요 (GitHub → Cloud Run 이전 작업 예정)."
+          exit 1
+
+  # 기존 정의는 Cloud Run 수동 실행 이전 작업의 참고용으로 보존. 실행되지 않음.
   send-friday-integrated:
+    needs: manual-guard
+    if: ${{ false }}
     runs-on: ubuntu-latest
     # (2026-08-24) Weekly 제거로 benchmark 실행 시간 ~14분 (당시 22채널·Claude 30 상한)이
     # 유일한 실행. Recent 워크플로와 동일하게 40분으로 안전 마진 확보.

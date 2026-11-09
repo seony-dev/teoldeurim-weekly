@@ -20,9 +20,10 @@ name: 매주 금 Weekly Bundle (털어드림/묘한덕질/짤덕방)
 # cron·날짜 guard 제거 완료.
 # (2026-08-28) GitHub Actions schedule 지연 가능성 대비 운영 여유 확보를 위해
 # 08:42 → 08:17 로 25분 앞당김.
+# (2026-11-09) 정기 실행은 Cloud Scheduler(매주 금 09:10 KST) → Cloud Run Job
+# teoldeurim-friday-prod 로 이전. schedule 트리거 제거. sent history 는 GCS prod/ 가 기준.
+# 수동 실행(workflow_dispatch)은 Cloud Run 실행으로 이전되기 전까지 차단 (manual-guard).
 on:
-  schedule:
-    - cron: '17 23 * * 4'   # 목요일 23:17 UTC = 금요일 08:17 KST (정식 운영)
   workflow_dispatch:
     inputs:
       recipient_override:
@@ -54,7 +55,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 수동 실행 차단 — 리포트 생성·메일 발송 없이 안내 후 실패 처리.
+  manual-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 수동 실행 차단 안내
+        run: |
+          echo "::error::Production execution migrated to Cloud Run — manual GitHub execution temporarily disabled"
+          echo "정기 실행: Cloud Scheduler(매주 금 09:10 KST) → Cloud Run Job teoldeurim-friday-prod"
+          echo "수동 실행이 필요하면 Cloud Run Job 을 직접 execute 하세요 (GitHub → Cloud Run 이전 작업 예정)."
+          exit 1
+
+  # 기존 정의는 Cloud Run 수동 실행 이전 작업의 참고용으로 보존. 실행되지 않음.
   send-weekly-bundle:
+    needs: manual-guard
+    if: ${{ false }}
     runs-on: ubuntu-latest
     # 3 target 순차 실행 · 각 target Apify discovery+detail 호출 · Claude 분석 포함.
     # 참고 채널 총합 = 털어드림 7 + 묘한덕질 6 + 짤덕방 3 = 16 개 (× 채널당 50 raw).
