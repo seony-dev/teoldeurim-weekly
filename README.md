@@ -3,8 +3,9 @@
 K-pop Shorts 채널 **털어드림 · 묘한덕질** 의 콘텐츠 소싱을 자동화하는 공용 Benchmark 엔진.
 (짤덕방 target profile 은 보존되어 있으나 2026-11-11 부터 Weekly Bundle 대상에서 제외.)
 
-- **Weekly Bundle** — 매주 금요일 08:17 KST · 털어드림 · 묘한덕질 2 target 각각 Benchmark 리포트를 생성해 첨부 2개를 **한 통의 메일**로 발송.
-- **털어드림 Standard** — 격주 금요일 08:23 KST (ISO 홀수 주차) · 털어드림 전용 · 별도 메일 1통 (첨부 1개).
+- **정기 실행** — 매주 금요일 09:10 KST · Cloud Scheduler → Cloud Run Job `teoldeurim-friday-prod` (2026-11-09 GitHub Actions 에서 이전).
+- **Weekly Bundle** — 매주 · 털어드림 · 묘한덕질 2 target 각각 Benchmark 리포트를 생성해 첨부 2개를 **한 통의 메일**로 발송.
+- **털어드림 Standard** — 같은 실행에서 Weekly Bundle 완료 후 · KST ISO 홀수 주차만 · 털어드림 전용 · 별도 메일 1통 (첨부 1개).
 - **공용 엔진 · target profile 분리** — `scripts/benchmark.py` 하나가 `config/targets/{slug}.py` 를 target profile 로 로드해 identity · Reference 채널 · Hard filter · Claude prompt 를 주입받아 target 무관하게 동작.
 
 > 📌 Claude Code로 이 프로젝트를 이어서 작업한다면 **`CLAUDE.md`** 를 먼저 읽으세요. `docs/` 하위 문서는 legacy 시점 기준이므로 참고 정도로만.
@@ -13,20 +14,37 @@ K-pop Shorts 채널 **털어드림 · 묘한덕질** 의 콘텐츠 소싱을 자
 
 ## 주요 기능
 
-### 매주 금 Weekly Bundle (`weekly_bundle.yml`)
+### 정기 실행 (GCP · 2026-11-09 cutover)
 
-- **cron**: `17 23 * * 4` (목 23:17 UTC = **금 08:17 KST**)
-- **파이프라인**: `send_report.py --mode=weekly-bundle`
+- **Cloud Scheduler** `teoldeurim-friday-prod-schedule` — `10 9 * * 5` (`Asia/Seoul`) = **매주 금 09:10 KST**
+- → **Cloud Run Job** `teoldeurim-friday-prod` (`asia-northeast3`) · 인자 없음 = `scripts/friday_orchestrator.py --mode auto`
+- **auto mode** (한 execution 안에서 순차):
+  1. GCS execution lock 획득 — 같은 날짜로 이미 실행 중이면 중복으로 보고 정상 종료
+  2. **Weekly Bundle** (`send_report.py --mode=weekly-bundle`) — 매주
+  3. Weekly 가 완료(또는 이미 완료)된 경우에만 KST ISO 주차 판정 → **홀수 주차면 털어드림 Standard** (`send_report.py --mode=friday`), 짝수 주차면 skip
+  4. Weekly 가 실패 / ambiguous 이면 Standard 는 실행하지 않음
+- 실행 상태 (lock · status · completed marker) 와 sent history 는 GCS (`SENT_HISTORY_BACKEND=gcs`) · `STATE_NAMESPACE=prod` 기준
+- 명시 mode: `--mode=weekly-bundle` (Weekly 만) / `--mode=friday` (Standard 만 · 격주 판정 없음) — execution 별 `--args` 로 지정
+- **테스트 Job** `teoldeurim-friday-test` — 같은 이미지 · `TEST_MODE=1` · `STATE_NAMESPACE=test` (prod 상태·sent history 와 분리)
+
+```bash
+# ⚠️ 아래 명령은 실 Apify · Claude 과금 + 실 메일 발송이 발생 — 사용자 확인 후에만
+gcloud run jobs execute teoldeurim-friday-test --region=asia-northeast3
+gcloud run jobs execute teoldeurim-friday-prod --region=asia-northeast3 --args=--mode=friday
+```
+
+### Weekly Bundle (`send_report.py --mode=weekly-bundle`)
+
+- **실행**: 매주 금 정기 실행 (auto mode 1단계)
+- **파이프라인**:
   1. `benchmark.py` 를 target=teoldeurim / myohanduk 각각 `MODE=weekly` 로 순차 실행 (jjalduk 은 2026-11-11 부터 제외)
   2. 모든 target 성공 시에만 Gmail 1회 · 첨부 2개 (실패 target 이 하나라도 있으면 발송 skip · sent history 기록 skip)
   3. 발송 성공 후 각 target namespace 에 sent history 자동 저장
-- **workflow_dispatch inputs**: `recipient_override` / `report_date` / `notice` / `reissue` / `force_rescan`
 
-### 격주 금 털어드림 Standard (`weekly.yml`)
+### 털어드림 Standard (`send_report.py --mode=friday`)
 
-- **cron**: `23 23 * * 4` (목 23:23 UTC = **금 08:23 KST**) · ISO 홀수 주차만 실행
-- **파이프라인**: `send_report.py --mode=friday` — target=teoldeurim + MODE=standard 단독 실행 → HTML 그대로 발송
-- Weekly Bundle 과 concurrency group `teoldeurim-mailer` 공유 → Bundle 완료 후 Standard 순차 실행
+- **실행**: 매주 금 정기 실행에서 Weekly Bundle 완료 후 · KST ISO 홀수 주차만 (격주)
+- **파이프라인**: target=teoldeurim + MODE=standard 단독 실행 → HTML 그대로 발송
 
 ### Target 별 조건 요약
 
@@ -68,13 +86,16 @@ Common Benchmark Engine  (scripts/benchmark.py, target-agnostic)
   ├─ config/targets/myohanduk.py    identity + soft_guidance + 6 refs + weekly
   └─ config/targets/jjalduk.py      identity + soft_guidance + 3 refs + weekly (Weekly Bundle 제외 · 보존)
 
+Friday Orchestrator  (scripts/friday_orchestrator.py · Cloud Run Job 진입점)
+  └─ --mode auto (기본) : GCS lock → weekly-bundle → (KST ISO 홀수 주) friday
+
 Orchestrator  (scripts/send_report.py)
   ├─ --mode=weekly-bundle → run_weekly_bundle : teoldeurim·myohanduk × mode=weekly → 1 mail · 2 첨부
   ├─ --mode=friday        → run_friday        : teoldeurim × mode=standard → 별도 1 mail
   └─ --mode=monday        → run_monday        : legacy (workflow 미사용)
 ```
 
-**legacy 코드** (workflow 미사용 · 참고용으로만 유지):
+**legacy 코드** (정기 실행 미사용 · 참고용으로만 유지):
 - `scripts/weekly.py` — 이전 YouTube API 검색어 기반 파이프라인. 현재 `resend.yml` 만 사용.
 - `.github/workflows/resend.yml` — 본인만 대상 · 최신 Standard history 재발송.
 
@@ -86,7 +107,8 @@ Orchestrator  (scripts/send_report.py)
 - **Apify API** — `streamers/youtube-shorts-scraper` (Shorts discovery)
 - **Claude API** — `claude-opus-4-7`
 - **Gmail SMTP** — 리포트 발송 (첨부 다중 지원)
-- **GitHub Actions** — cron 스케줄링 · 수동 실행
+- **GCP** (2026-11-09~) — Cloud Scheduler (정기 트리거) · Cloud Run Job (실행) · GCS (실행 상태 · sent history) · Secret Manager (시크릿)
+- **GitHub Actions** — 정기 실행 미사용 (`schedule:` 트리거 없음) · legacy `resend.yml` 수동 실행만 가능
 
 ---
 
@@ -113,14 +135,14 @@ python -m pip install -r requirements.txt
 
 **실행 모드 env** (선택):
 - `DRY_RUN=1` — Gmail 발송 skip + sent history 기록 skip (Apify · Claude 호출은 진행)
-- `TEST_MODE=1` — subject 앞 `[TEST] ` prefix + production sent history 저장 skip (실 발송은 진행). 코드에 살아 있으나 **현재 운영 workflow yml 에서는 사용하지 않음** (2026-08-25~26 검증 단계에서 임시 활용 후 2026-08-26 운영 전환 시 제거됨). 필요 시 workflow yml 에 `TEST_MODE: '1'` env 를 추가하면 즉시 재활성.
+- `TEST_MODE=1` — subject 앞 `[TEST] ` prefix + production sent history 저장 skip (실 발송은 진행). 현재 Cloud Run 테스트 Job `teoldeurim-friday-test` 에 `STATE_NAMESPACE=test` 와 함께 설정됨 (prod Job 에는 없음).
 - `TARGET=teoldeurim|myohanduk|jjalduk` · `MODE=weekly|standard` — benchmark.py 실행 시 target/mode 지정
-- 기타 workflow_dispatch input: `FORCE_RESCAN` / `REPORT_DATE` / `NOTICE` / `REISSUE`
+- 기타: `FORCE_RESCAN` / `REPORT_DATE` / `NOTICE` / `REISSUE` (이전 GitHub workflow_dispatch input 과 같은 env)
 
-### GitHub Actions 시크릿
+### 시크릿
 
-- **정식 운영**: `APIFY_TOKEN` / `ANTHROPIC_API_KEY` / `GMAIL_ADDRESS` / `GMAIL_APP_PASSWORD` / `RECIPIENT_EMAIL`
-- **검증용 재발송** (`resend.yml`): 위 + `RECIPIENT_EMAIL_SELF` + `YOUTUBE_API_KEY`
+- **Cloud Run Job (정기 운영 · prod/test)**: Secret Manager 참조 — `APIFY_TOKEN` / `ANTHROPIC_API_KEY` / `GMAIL_ADDRESS` / `GMAIL_APP_PASSWORD` / `RECIPIENT_EMAIL`
+- **GitHub Actions 시크릿**: 위 5개 + `RECIPIENT_EMAIL_SELF` / `YOUTUBE_API_KEY` 등록 유지. 현재 실제로 실행 가능한 workflow 는 legacy `resend.yml` 뿐
 
 ### 로컬 실행 · 검증
 
@@ -138,13 +160,13 @@ python -c "import ast; ast.parse(open('scripts/benchmark.py',encoding='utf-8').r
 for t in tests/test_*.py; do python "$t"; done
 ```
 
-### GitHub 수동 실행
+### GitHub Actions (2026-11-09 이후 정기 실행 미사용)
 
-Actions 탭 → 워크플로 선택 → **Run workflow**
-
-- `매주 금 Weekly Bundle (털어드림/묘한덕질/짤덕방)` — inputs: `recipient_override` / `report_date` / `notice` / `reissue` / `force_rescan`
-- `털어드림 격주 Benchmark Standard (금요일)` — inputs: `force_rescan` / `report_date` / `notice` / `reissue`
-- `털어드림 리포트 재발송 (본인만)` — legacy · 최신 Standard history 를 `RECIPIENT_EMAIL_SELF` 로 재발송
+- 모든 workflow 에서 `schedule:` 트리거 제거 — 정기 실행은 위 **정기 실행 (GCP)** 참고.
+- `weekly_bundle.yml` · `weekly.yml` — `workflow_dispatch` 버튼은 남아 있지만 `manual-guard` job 이 안내 메시지 출력 후 **실패 처리** (리포트 생성·메일 발송 없음). 기존 job 정의는 Cloud Run 수동 실행 이전 작업 참고용으로 보존 (`if: ${{ false }}`).
+  - 참고: `weekly_bundle.yml` 의 `name:` 은 아직 `매주 금 Weekly Bundle (털어드림/묘한덕질/짤덕방)` 으로 Actions 탭에 표시되지만, 실제 Bundle 대상은 털어드림 · 묘한덕질 2개.
+- `resend.yml` (`털어드림 리포트 재발송 (본인만)`) — legacy · guard 없음 · 최신 `history/` Standard 를 `RECIPIENT_EMAIL_SELF` 로 재발송.
+- 수동으로 리포트를 다시 돌려야 하면 GitHub 대신 Cloud Run Job 을 execute (위 명령 · 과금·발송 주의).
 
 ---
 
@@ -205,14 +227,15 @@ Actions 탭 → 워크플로 선택 → **Run workflow**
 
 ### 기타
 
-- GitHub Actions · Gmail SMTP · Python 무료
+- Gmail SMTP · Python 무료
+- Cloud Run · Cloud Scheduler · GCS · Secret Manager 사용료는 GCP 콘솔에서 확인 (확인 필요)
 - **실 청구액은 Apify / Anthropic 콘솔에서 별도 확인**
 
 ---
 
 ## 보안 메모
 
-- 시크릿은 GitHub Encrypted Secrets 및 로컬 `.env` (git 제외) 에만
+- 시크릿은 GCP Secret Manager (Cloud Run) · GitHub Encrypted Secrets · 로컬 `.env` (git 제외) 에만
 - `.env` · API 키 · 앱 비번은 절대 커밋·로그·문서에 노출 금지
 - 키 노출 시 즉시 폐기 후 재발급
 
