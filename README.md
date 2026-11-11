@@ -141,8 +141,15 @@ python -m pip install -r requirements.txt
 
 ### 시크릿
 
-- **Cloud Run Job (정기 운영 · prod/test)**: Secret Manager 참조 — `APIFY_TOKEN` / `ANTHROPIC_API_KEY` / `GMAIL_ADDRESS` / `GMAIL_APP_PASSWORD` / `RECIPIENT_EMAIL`
-- **GitHub Actions 시크릿**: 위 5개 + `RECIPIENT_EMAIL_SELF` / `YOUTUBE_API_KEY` 등록 유지. 현재 실제로 실행 가능한 workflow 는 legacy `resend.yml` 뿐
+- **Cloud Run Job (정기 운영 · prod/test)**: Secret Manager 참조 (version `latest`)
+  - 공통 — `APIFY_TOKEN` / `ANTHROPIC_API_KEY` / `GMAIL_ADDRESS` / `GMAIL_APP_PASSWORD` (secret resource 이름 = runtime env 이름)
+  - 수신자 — secret resource 는 Job 별로 다르고, 둘 다 runtime env **`RECIPIENT_EMAIL`** 로 주입됨
+
+    | Cloud Run Job | secret resource | runtime env |
+    |---|---|---|
+    | `teoldeurim-friday-prod` | `RECIPIENT_EMAIL_PROD` | `RECIPIENT_EMAIL` |
+    | `teoldeurim-friday-test` | `RECIPIENT_EMAIL_TEST` | `RECIPIENT_EMAIL` |
+- **GitHub Actions 시크릿** (Secret Manager 와 별개): `APIFY_TOKEN` / `ANTHROPIC_API_KEY` / `GMAIL_ADDRESS` / `GMAIL_APP_PASSWORD` / `RECIPIENT_EMAIL` / `RECIPIENT_EMAIL_SELF` / `YOUTUBE_API_KEY` 등록 유지. 현재 실제로 실행 가능한 workflow 는 legacy `resend.yml` 뿐
 
 ### 로컬 실행 · 검증
 
