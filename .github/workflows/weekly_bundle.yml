@@ -1,4 +1,4 @@
-name: 매주 금 Weekly Bundle (털어드림/묘한덕질/짤덕방)
+name: 매주 금 Weekly Bundle (털어드림/묘한덕질)
 
 # (2026-08-25 신설) 3 target × mode=weekly 통합 리포트 · Gmail 1통 · 첨부 3개.
 #
@@ -23,6 +23,8 @@ name: 매주 금 Weekly Bundle (털어드림/묘한덕질/짤덕방)
 # (2026-11-09) 정기 실행은 Cloud Scheduler(매주 금 09:10 KST) → Cloud Run Job
 # teoldeurim-friday-prod 로 이전. schedule 트리거 제거. sent history 는 GCS prod/ 가 기준.
 # 수동 실행(workflow_dispatch)은 Cloud Run 실행으로 이전되기 전까지 차단 (manual-guard).
+# (2026-11-11) 짤덕방(jjalduk) Weekly Bundle 제외에 맞춰 name 에서 짤덕방 제거.
+#   아래 보존용 job(if: false) 본문은 이전 정의 그대로 둠.
 on:
   workflow_dispatch:
     inputs:

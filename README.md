@@ -163,8 +163,7 @@ for t in tests/test_*.py; do python "$t"; done
 ### GitHub Actions (2026-11-09 이후 정기 실행 미사용)
 
 - 모든 workflow 에서 `schedule:` 트리거 제거 — 정기 실행은 위 **정기 실행 (GCP)** 참고.
-- `weekly_bundle.yml` · `weekly.yml` — `workflow_dispatch` 버튼은 남아 있지만 `manual-guard` job 이 안내 메시지 출력 후 **실패 처리** (리포트 생성·메일 발송 없음). 기존 job 정의는 Cloud Run 수동 실행 이전 작업 참고용으로 보존 (`if: ${{ false }}`).
-  - 참고: `weekly_bundle.yml` 의 `name:` 은 아직 `매주 금 Weekly Bundle (털어드림/묘한덕질/짤덕방)` 으로 Actions 탭에 표시되지만, 실제 Bundle 대상은 털어드림 · 묘한덕질 2개.
+- `weekly_bundle.yml` (`매주 금 Weekly Bundle (털어드림/묘한덕질)`) · `weekly.yml` (`털어드림 격주 Benchmark Standard (금요일)`) — `workflow_dispatch` 버튼은 남아 있지만 `manual-guard` job 이 안내 메시지 출력 후 **실패 처리** (리포트 생성·메일 발송 없음). 기존 job 정의는 Cloud Run 수동 실행 이전 작업 참고용으로 보존 (`if: ${{ false }}`).
 - `resend.yml` (`털어드림 리포트 재발송 (본인만)`) — legacy · guard 없음 · 최신 `history/` Standard 를 `RECIPIENT_EMAIL_SELF` 로 재발송.
 - 수동으로 리포트를 다시 돌려야 하면 GitHub 대신 Cloud Run Job 을 execute (위 명령 · 과금·발송 주의).
 
