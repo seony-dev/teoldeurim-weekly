@@ -1,8 +1,10 @@
-name: 매주 금 Weekly Bundle (털어드림/묘한덕질/짤덕방)
+name: 매주 금 Weekly Bundle (털어드림/묘한덕질)
 
-# (2026-08-25 신설) 3 target × mode=weekly 통합 리포트 · Gmail 1통 · 첨부 3개.
+# (2026-08-25 신설) 2 target(털어드림/묘한덕질) × mode=weekly 통합 리포트 · Gmail 1통 · 첨부 2개.
+#   (신설 당시 3 target · 첨부 3개였으나 2026-11-11 짤덕방 제외)
 #
-# 실행 시각: 매주 금 08:17 KST = 목요일 23:17 UTC.
+# 실행 시각: 현재 정기 실행은 Cloud Scheduler 에서 매주 금 09:10 KST 에 수행 (2026-11-09~, 아래 참고).
+#   과거 GitHub Actions 정기 실행 시각: 매주 금 08:17 KST = 목요일 23:17 UTC.
 #   이전 monday_recent.yml 의 월/수/금 3회 실행은 사용자 지시로 금요일 1회로 변경.
 #   (2026-08-28) GitHub Actions schedule 지연 가능성 대비 운영 여유 확보를 위해
 #   08:42 → 08:17 로 25분 앞당김. 격주 Standard(weekly.yml) 도 08:47 → 08:23 으로 동시 이동.
@@ -11,7 +13,7 @@ name: 매주 금 Weekly Bundle (털어드림/묘한덕질/짤덕방)
 # 공유해 큐 대기 → Weekly Bundle 완료 후 Standard 순차 실행. push race 완전 회피.
 #
 # 발송 규칙:
-#   · 3 target 중 하나라도 실패하면 부분 첨부로 발송하지 않고 skip (raise).
+#   · 2 target 중 하나라도 실패하면 부분 첨부로 발송하지 않고 skip (raise).
 #   · Gmail 발송 성공 후에만 각 target sent history 를 기록 (target namespace).
 #   · recipient_override 지정 실행은 검증용 test 발송 — production sent history 를 오염시키지 않음.
 #
@@ -23,6 +25,8 @@ name: 매주 금 Weekly Bundle (털어드림/묘한덕질/짤덕방)
 # (2026-11-09) 정기 실행은 Cloud Scheduler(매주 금 09:10 KST) → Cloud Run Job
 # teoldeurim-friday-prod 로 이전. schedule 트리거 제거. sent history 는 GCS prod/ 가 기준.
 # 수동 실행(workflow_dispatch)은 Cloud Run 실행으로 이전되기 전까지 차단 (manual-guard).
+# (2026-11-11) 짤덕방(jjalduk) Weekly Bundle 제외에 맞춰 name 에서 짤덕방 제거.
+#   아래 보존용 job(if: false) 본문은 이전 정의 그대로 둠.
 on:
   workflow_dispatch:
     inputs:
