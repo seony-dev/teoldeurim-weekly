@@ -470,15 +470,16 @@ def run_monday(date_slug, tmp_dir, dry_run=False):
 
 
 # ============================================================================
-# mode: weekly-bundle — 매주 금 3-target Weekly Bundle (2026-08-25 신설)
-#   · target=teoldeurim / myohanduk / jjalduk 각각 mode=weekly 실행
-#   · HTML 3개 생성 성공 후에만 Gmail 1통 발송 (첨부 3개)
+# mode: weekly-bundle — 매주 금 Weekly Bundle (2026-08-25 신설)
+#   · _WEEKLY_BUNDLE_TARGETS 의 각 target 을 mode=weekly 로 실행
+#   · 모든 target HTML 생성 성공 후에만 Gmail 1통 발송 (target 당 첨부 1개)
 #   · 부분 실패 시 발송·sent history 기록 모두 skip
+# (2026-11-11) jjalduk(짤덕방) 은 운영 요청으로 Weekly Bundle 에서 제외.
+#   target profile · sent history 는 보존 (TARGET=jjalduk 단독 benchmark 실행은 그대로 가능).
 # ============================================================================
 _WEEKLY_BUNDLE_TARGETS = [
     ("teoldeurim", "털어드림"),
     ("myohanduk",  "묘한덕질"),
-    ("jjalduk",    "짤덕방"),
 ]
 
 
@@ -516,8 +517,9 @@ def _run_target_weekly(date_slug, tmp_dir, target_slug):
 def _weekly_bundle_body_html(date_slug, counts, notice_html=""):
     """Weekly Bundle 본문 — 사람이 바로 이해할 수 있게 작성.
 
-    counts: [("털어드림", N), ("묘한덕질", N), ("짤덕방", N)]
+    counts: [("털어드림", N), ("묘한덕질", N)] — _WEEKLY_BUNDLE_TARGETS 순서
     """
+    n_channels = len(counts)
     count_lines = "".join(
         f'  <li><b>{_html.escape(name)}</b> · 이번 주 후보 <b>{c}건</b> '
         f'(첨부 HTML 참조)</li>'
@@ -528,12 +530,12 @@ def _weekly_bundle_body_html(date_slug, counts, notice_html=""):
         zero_note = (
             "<p style='background:#fffbeb;border-left:3px solid #d97706;"
             "padding:8px 12px;margin:12px 0;border-radius:0 4px 4px 0'>"
-            "ℹ️ <b>3개 채널 모두 이번 주 신규 후보 0건입니다.</b> "
+            f"ℹ️ <b>{n_channels}개 채널 모두 이번 주 신규 후보 0건입니다.</b> "
             "수집·필터링·AI 분석은 정상 완료되었으며, 조건에 맞는 새 영상이 없습니다.</p>"
         )
     return f"""<html><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;line-height:1.6;color:#111;max-width:640px">
 {notice_html}<p>안녕하세요, 박서은입니다.</p>
-<p>이번 주 <b>Weekly Benchmark 리포트</b> 3개 채널분을 한 통에 모아 보내드립니다. 첨부된 HTML 파일 3개 (각 채널별) 에서 상세 후보와 기획 포인트를 확인하실 수 있습니다.</p>
+<p>이번 주 <b>Weekly Benchmark 리포트</b> {n_channels}개 채널분을 한 통에 모아 보내드립니다. 첨부된 HTML 파일 {n_channels}개 (각 채널별) 에서 상세 후보와 기획 포인트를 확인하실 수 있습니다.</p>
 
 <h3 style="margin-top:20px;margin-bottom:8px;font-size:15px">📎 첨부된 채널 리포트</h3>
 <ul style="margin:4px 0 12px 20px">
@@ -543,7 +545,7 @@ def _weekly_bundle_body_html(date_slug, counts, notice_html=""):
 
 <h3 style="margin-top:20px;margin-bottom:8px;font-size:15px">🔎 이번 주 후보 선정 방식</h3>
 <ul style="margin:4px 0 12px 20px">
-  <li>각 채널은 <b>자기 채널의 성격·운영 방향·Reference 채널 목록</b> 을 기준으로 후보를 <b>별도로</b> 분석합니다. 세 채널 후보는 서로 섞이지 않습니다.</li>
+  <li>각 채널은 <b>자기 채널의 성격·운영 방향·Reference 채널 목록</b> 을 기준으로 후보를 <b>별도로</b> 분석합니다. 채널별 후보는 서로 섞이지 않습니다.</li>
   <li>Reference 채널의 인기 Shorts 를 수집한 뒤 조회수·업로드 기간·길이 조건을 통과한 영상 중 <b>조회수 상위 최대 30개</b> 를 AI 로 분석합니다. 조건 통과 후보가 30개보다 적으면 남은 후보 수만큼만 분석합니다.</li>
   <li>AI 분석 결과에서 두 축으로 후보를 뽑습니다:
     <ul style="margin:2px 0 2px 18px">
@@ -551,7 +553,7 @@ def _weekly_bundle_body_html(date_slug, counts, notice_html=""):
       <li><b>Benchmark 활용 후보 최대 5개</b> — 훅·제목 구조·팬덤 반응 등 재사용 가치가 높은 참고 영상</li>
     </ul>
     각각 최대 5개까지이며 두 리스트는 상호 배타적입니다. 실제 노출 수는 분석 결과에 따라 <b>0~10건</b> 범위에서 결정됩니다.</li>
-  <li>이전에 이미 발송된 후보는 채널별로 자동 제외됩니다 (묘한덕질/짤덕방은 신규 도입이므로 첫 주는 제외 없음).</li>
+  <li>이전에 이미 발송된 후보는 채널별로 자동 제외됩니다.</li>
 </ul>
 
 <h3 style="margin-top:20px;margin-bottom:8px;font-size:15px">💡 참고 사항</h3>
@@ -565,9 +567,9 @@ def _weekly_bundle_body_html(date_slug, counts, notice_html=""):
 
 
 def run_weekly_bundle(date_slug, tmp_dir, dry_run=False):
-    """매주 금 08:42 KST — 3 target × mode=weekly 통합 Bundle 메일.
+    """매주 금 — _WEEKLY_BUNDLE_TARGETS × mode=weekly 통합 Bundle 메일.
 
-    부분 실패 시 발송·sent 기록 모두 skip (raise). 3개 모두 성공한 경우에만 1통 발송.
+    부분 실패 시 발송·sent 기록 모두 skip (raise). 모든 target 이 성공한 경우에만 1통 발송.
     """
     results = []
     for slug, name in _WEEKLY_BUNDLE_TARGETS:
@@ -585,17 +587,18 @@ def run_weekly_bundle(date_slug, tmp_dir, dry_run=False):
 
     counts = [(r["name"], len(r["data"]["video_ids"])) for r in results]
     total = sum(n for _, n in counts)
+    channel_names = "/".join(name for name, _ in counts)
     if total == 0:
-        subject = f"[털어드림/묘한덕질/짤덕방 Weekly] {date_slug} · 신규 후보 없음"
+        subject = f"[{channel_names} Weekly] {date_slug} · 신규 후보 없음"
     else:
         parts = " / ".join(f"{n}건" for _, n in counts)
-        subject = f"[털어드림/묘한덕질/짤덕방 Weekly] {date_slug} · {parts}"
+        subject = f"[{channel_names} Weekly] {date_slug} · {parts}"
     subject = _test_prefix() + _reissue_prefix() + subject
 
     notice_block = _notice_html(os.environ.get("NOTICE", ""))
     body_html = _weekly_bundle_body_html(date_slug, counts, notice_html=notice_block)
 
-    # preview 저장 (3개 HTML + body)
+    # preview 저장 (target 별 HTML + body)
     body_preview_path = LOCAL_OUTPUT_DIR / f"preview_weekly_bundle_body_{date_slug}.html"
     body_preview_path.write_text(body_html, encoding="utf-8")
     _log(f"  💾 body preview: {body_preview_path.relative_to(ROOT)}")
@@ -609,7 +612,7 @@ def run_weekly_bundle(date_slug, tmp_dir, dry_run=False):
         _log(f"     상태: counts={counts}, subject={subject!r}")
         return
 
-    # 3개 첨부 (첫 번째는 attachment_html, 나머지는 extra_attachments)
+    # target 당 첨부 1개 (첫 번째는 attachment_html, 나머지는 extra_attachments)
     first = results[0]
     extras = []
     for r in results[1:]:

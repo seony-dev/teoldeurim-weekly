@@ -531,14 +531,13 @@ def inproc_runner(mode, extra_env):
 
 set_env(SENT_HISTORY_BACKEND="gcs", SENT_HISTORY_GCS_BUCKET="e2e", STATE_NAMESPACE="prod")
 rc = orch.main(now=ODD_FRI, runner=inproc_runner)
-chk("E2E-01: exit 0 · SMTP 2회 (Weekly → Standard 순서)",
+chk("E2E-01: exit 0 · SMTP 2회 (Weekly(털어드림·묘한덕질) → Standard 순서)",
     rc == 0 and [s for s, _ in smtp_log] == [
-        "[털어드림/묘한덕질/짤덕방 Weekly] 2026-11-06 · 1건 / 1건 / 1건",
+        "[털어드림/묘한덕질 Weekly] 2026-11-06 · 1건 / 1건",
         "[털어드림 격주 후보] 2026-11-06 · Benchmark 1건"], f"{smtp_log}")
 chk("E2E-02: 각 SMTP 호출 순간 status = sending", [s for _, s in smtp_log] == ["sending", "sending"])
-chk("E2E-03: prod/sent 에 Weekly 3 + Standard 1 기록",
-    e2e.keys("prod/sent/") == ["prod/sent/jjalduk/2026-11-06_weekly.json",
-                               "prod/sent/myohanduk/2026-11-06_weekly.json",
+chk("E2E-03: prod/sent 에 Weekly 2 + Standard 1 기록 (jjalduk 없음)",
+    e2e.keys("prod/sent/") == ["prod/sent/myohanduk/2026-11-06_weekly.json",
                                "prod/sent/teoldeurim/2026-11-06_standard.json",
                                "prod/sent/teoldeurim/2026-11-06_weekly.json"])
 chk("E2E-04: marker 2개 · lock 해제",

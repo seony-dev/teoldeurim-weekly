@@ -49,7 +49,7 @@ BENCHMARK_CONFIG = {
     #
     # (2026-08-26) discovery actor 자체가 title(원본) + translatedTitle(번역) 을 함께
     # 반환하는 것을 실측 확인 (1,124건 검증). 별도 detail actor(youtube-scraper) 2차
-    # 호출은 제거됨. Weekly Bundle 3 target 각 discovery 1회씩 = 총 3 runs.
+    # 호출은 제거됨. Weekly Bundle target 당 discovery 1회씩 (2026-11-11 jjalduk 제외 → 총 2 runs).
     "APIFY_DISCOVERY_ACTOR": "streamers/youtube-shorts-scraper",
 
     # 이미 발송된 영상(sent history)은 후보 리스트에서 제외.

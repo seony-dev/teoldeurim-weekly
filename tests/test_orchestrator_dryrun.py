@@ -2,7 +2,8 @@
 """Orchestrator DRY_RUN 구조 검증 (subprocess/SMTP 없이).
 
 지키는 원칙:
-  · Weekly Bundle 은 3 target × mode=weekly benchmark subprocess 를 순차 호출.
+  · Weekly Bundle 은 털어드림·묘한덕질 2 target × mode=weekly benchmark subprocess 를 순차 호출
+    (2026-11-11 jjalduk 제외 — TARGET=jjalduk subprocess 없음).
     각 subprocess 는 TARGET/MODE/REPORT_FRAGMENT_PATH env 를 정확히 넘겨야 함.
   · Standard 는 target=teoldeurim + mode=standard benchmark subprocess 1회 호출.
   · DRY_RUN=1 에서는 Gmail send · sent history 기록 · git push 는 발생하지 않음.
@@ -81,7 +82,7 @@ send_report._env_snapshot = lambda: {
 
 
 # ═══════════════════════════════════════════════════════════════════
-# CASE A) Weekly Bundle · dry_run=False → 정상 흐름 (subprocess 3회 · 발송 1회)
+# CASE A) Weekly Bundle · dry_run=False → 정상 흐름 (subprocess 2회 · 발송 1회)
 # ═══════════════════════════════════════════════════════════════════
 tmp = ROOT / "local_output" / "_dryrun_tmp"
 tmp.mkdir(parents=True, exist_ok=True)
@@ -89,15 +90,15 @@ tmp.mkdir(parents=True, exist_ok=True)
 _run_child_calls.clear(); _send_calls.clear(); _record_calls.clear()
 send_report.run_weekly_bundle("2026-09-04", tmp, dry_run=False)
 
-chk("BUNDLE-01: benchmark subprocess 정확히 3회 호출",
-    len(_run_child_calls) == 3, f"got {len(_run_child_calls)}")
+chk("BUNDLE-01: benchmark subprocess 정확히 2회 호출",
+    len(_run_child_calls) == 2, f"got {len(_run_child_calls)}")
 targets_called = [c["extra_env"].get("TARGET") for c in _run_child_calls]
-chk("BUNDLE-02: 3 target 순서 = teoldeurim, myohanduk, jjalduk",
-    targets_called == ["teoldeurim", "myohanduk", "jjalduk"],
+chk("BUNDLE-02: target 순서 = teoldeurim, myohanduk (jjalduk 없음)",
+    targets_called == ["teoldeurim", "myohanduk"],
     f"got {targets_called}")
 modes_called = [c["extra_env"].get("MODE") for c in _run_child_calls]
 chk("BUNDLE-03: 모든 호출 MODE=weekly",
-    modes_called == ["weekly", "weekly", "weekly"])
+    modes_called == ["weekly", "weekly"])
 # teoldeurim 은 backward-compat 로 PROFILE=recent 를 함께 전달
 chk("BUNDLE-04: teoldeurim 호출은 PROFILE=recent (backward compat 파일명)",
     _run_child_calls[0]["extra_env"].get("PROFILE") == "recent")
@@ -105,11 +106,11 @@ chk("BUNDLE-05: myohanduk 호출은 PROFILE=weekly",
     _run_child_calls[1]["extra_env"].get("PROFILE") == "weekly")
 chk("BUNDLE-06: send_email 1회 호출",
     len(_send_calls) == 1)
-chk("BUNDLE-07: sent history 3회 기록 (target namespace 각각)",
-    len(_record_calls) == 3)
+chk("BUNDLE-07: sent history 2회 기록 (target namespace 각각)",
+    len(_record_calls) == 2)
 target_slugs_recorded = {r["target_slug"] for r in _record_calls}
-chk("BUNDLE-08: 기록된 target slug = 3 target",
-    target_slugs_recorded == {"teoldeurim", "myohanduk", "jjalduk"})
+chk("BUNDLE-08: 기록된 target slug = teoldeurim, myohanduk (jjalduk 없음)",
+    target_slugs_recorded == {"teoldeurim", "myohanduk"})
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -117,8 +118,8 @@ chk("BUNDLE-08: 기록된 target slug = 3 target",
 # ═══════════════════════════════════════════════════════════════════
 _run_child_calls.clear(); _send_calls.clear(); _record_calls.clear()
 send_report.run_weekly_bundle("2026-09-04", tmp, dry_run=True)
-chk("DRY-BUNDLE-01: subprocess 3회 실행 (Apify/Claude 유료 호출 자체는 실행)",
-    len(_run_child_calls) == 3)
+chk("DRY-BUNDLE-01: subprocess 2회 실행 (Apify/Claude 유료 호출 자체는 실행)",
+    len(_run_child_calls) == 2)
 chk("DRY-BUNDLE-02: DRY_RUN send_email 0회",
     len(_send_calls) == 0)
 chk("DRY-BUNDLE-03: DRY_RUN sent history 0회 (production 오염 방지)",

@@ -175,7 +175,8 @@ _buckets["e3"].faults.append(("upload", f"prod/markers/{key}", "before", FakeGcs
 mail = Mail()
 rc, err = run_main(W, mail, **gcs_env("e3", "2099-06-19", W))
 chk("MARKER-01: exit != 0 · SMTP 1회 · 오류 메일 0회", rc != 0 and len(mail.reports) == 1 and mail.errors == [])
-chk("MARKER-02: sent history 3개 기록됨", len(_buckets["e3"].keys("prod/sent/")) == 3)
+chk("MARKER-02: sent history 2개 기록됨 (Weekly target 2개, jjalduk 없음)",
+    len(_buckets["e3"].keys("prod/sent/")) == 2 and _buckets["e3"].keys("prod/sent/jjalduk/") == [])
 chk("MARKER-03: status = sent 유지 (ambiguous)", state_of("e3", key) == "sent")
 chk("MARKER-04: marker 없음", _buckets["e3"].keys("prod/markers/") == [])
 
@@ -306,8 +307,9 @@ def orch_run(bucket_name, report_date, now, mail):
 
 ODD_FRI = datetime(2026, 11, 6, 8, 20, tzinfo=timezone(timedelta(hours=9)))   # W45
 
+# Weekly Bundle 마지막 target(myohanduk) 의 sent history 쓰기 실패
 _buckets.setdefault("o1", FakeBucket("o1")).faults.append(
-    ("upload", "prod/sent/jjalduk/", "before", FakeGcsError(503, "unavailable")))
+    ("upload", "prod/sent/myohanduk/", "before", FakeGcsError(503, "unavailable")))
 mail = Mail()
 mail.child_rcs = []
 rc, err = orch_run("o1", "2099-08-14", ODD_FRI, mail)

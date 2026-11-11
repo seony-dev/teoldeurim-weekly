@@ -155,9 +155,10 @@ send_report.run_weekly_bundle("2099-03-06", FRAG, dry_run=False)
 storage.get_state_store = _orig_get_state_store
 chk("NOKEY-01: send_email 1회 (기존 동작)", len(smtp.calls) == 1)
 chk("NOKEY-02: 상태 저장소 접근 0회", _state_store_calls == [])
-chk("NOKEY-03: sent history 는 기존처럼 local 에 3개 기록",
+chk("NOKEY-03: sent history 는 기존처럼 local 에 Weekly target 2개 기록 (jjalduk 없음)",
     all((_TMP / "benchmark/history/sent" / s / "2099-03-06_weekly.json").exists()
-        for s in ("teoldeurim", "myohanduk", "jjalduk")))
+        for s in ("teoldeurim", "myohanduk"))
+    and not (_TMP / "benchmark/history/sent/jjalduk").exists())
 chk("NOKEY-04: local 경로에서 google SDK 미로드", "google.cloud.storage" not in sys.modules)
 
 
@@ -176,25 +177,26 @@ ev = bB.events
 i_sending = upload_index(ev, f"prod/status/{KEY}.json")
 i_smtp = ev.index(("SMTP", "sending")) if ("SMTP", "sending") in ev else -1
 i_sent_status = next((i for i, e in enumerate(ev) if i > i_smtp and e == ("upload", f"prod/status/{KEY}.json")), -1)
-i_hist = [upload_index(ev, f"prod/sent/{s}/2099-03-13_weekly.json") for s in ("teoldeurim", "myohanduk", "jjalduk")]
+i_hist = [upload_index(ev, f"prod/sent/{s}/2099-03-13_weekly.json") for s in ("teoldeurim", "myohanduk")]
 i_marker = upload_index(ev, f"prod/markers/{KEY}.completed")
 i_completed = max((i for i, e in enumerate(ev) if e == ("upload", f"prod/status/{KEY}.json")), default=-1)
 chk("OK-01: send_email 호출 순간 status = sending", bool(smtp.calls) and smtp.calls[0]["state_at_call"] == "sending")
-chk("OK-02: 순서 sending → SMTP → sent → history ×3 → marker → completed",
+chk("OK-02: 순서 sending → SMTP → sent → history ×2 → marker → completed",
     -1 < i_sending < i_smtp < i_sent_status < min(i_hist) and max(i_hist) < i_marker < i_completed,
     f"events={ev}")
 st = status_of(bB, "prod", KEY)
 chk("OK-03: 최종 status completed · run_id 기록", st.get("state") == "completed" and st.get("run_id") == "RUN-B")
-chk("OK-04: sent_history_plan 에 3 target video_ids",
+chk("OK-04: sent_history_plan 에 Weekly 2 target video_ids (jjalduk 없음)",
     [(p["target_slug"], p["video_ids"]) for p in st["sent_history_plan"]]
-    == [("teoldeurim", ["t1", "t2"]), ("myohanduk", ["m1"]), ("jjalduk", ["j1", "j2", "j3"])]
+    == [("teoldeurim", ["t1", "t2"]), ("myohanduk", ["m1"])]
     if st.get("sent_history_plan") else False)
 chk("OK-05: completed marker 존재", f"prod/markers/{KEY}.completed" in bB.objects)
-chk("OK-06: sent history 3개 (payload video_ids 동일)",
-    json.loads(bB.text("prod/sent/jjalduk/2099-03-13_weekly.json"))["candidates_video_ids"] == ["j1", "j2", "j3"])
+chk("OK-06: sent history 2개 (payload video_ids 동일) · jjalduk 기록 없음",
+    json.loads(bB.text("prod/sent/myohanduk/2099-03-13_weekly.json"))["candidates_video_ids"] == ["m1"]
+    and bB.keys("prod/sent/jjalduk/") == [])
 chk("OK-07: test namespace 미사용", bB.keys("test/") == [])
-chk("OK-08: 메일 내용 무변화 (subject)",
-    smtp.calls[0]["subject"] == "[털어드림/묘한덕질/짤덕방 Weekly] 2099-03-13 · 2건 / 1건 / 3건")
+chk("OK-08: subject 형식 유지 (채널 2개)",
+    smtp.calls[0]["subject"] == "[털어드림/묘한덕질 Weekly] 2099-03-13 · 2건 / 1건")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -228,7 +230,7 @@ chk("HISTFAIL-01: ExecutionPersistenceError 로 전파 (원인 GCS 503 보존)",
 chk("HISTFAIL-02: SMTP 1회", len(smtp.calls) == 1)
 chk("HISTFAIL-03: status = sent (자동 재발송 금지 상태)", state_of(bD, "prod", KEY) == "sent")
 chk("HISTFAIL-04: sent 상태에도 sent_history_plan 보존 (수동 복구용)",
-    len(status_of(bD, "prod", KEY).get("sent_history_plan") or []) == 3)
+    len(status_of(bD, "prod", KEY).get("sent_history_plan") or []) == 2)
 chk("HISTFAIL-05: marker 없음", bD.keys("prod/markers/") == [])
 
 

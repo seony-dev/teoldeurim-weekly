@@ -178,12 +178,14 @@ chk("SINGLE-01: apify_collect 는 APIFY_DISCOVERY_ACTOR 만 참조",
 chk("SINGLE-02: apify_collect 는 APIFY_DETAIL_ACTOR 참조 없음",
     "APIFY_DETAIL_ACTOR" not in _ac_src)
 
-# Weekly Bundle 예상 흐름 재확인 (send_report.run_weekly_bundle 은 3 target 순차)
+# Weekly Bundle 예상 흐름 재확인 (2026-11-11: 털어드림·묘한덕질 2 target, jjalduk 제외)
 _sr = Path("scripts/send_report.py").read_text(encoding="utf-8")
 _targets = _sr.split("_WEEKLY_BUNDLE_TARGETS = [", 1)[1].split("]", 1)[0]
-for slug in ["teoldeurim", "myohanduk", "jjalduk"]:
-    chk(f"BUNDLE[{slug}]: Weekly Bundle 3 target 에 포함",
+for slug in ["teoldeurim", "myohanduk"]:
+    chk(f"BUNDLE[{slug}]: Weekly Bundle target 에 포함",
         f'"{slug}"' in _targets)
+chk("BUNDLE[jjalduk]: Weekly Bundle target 에서 제외",
+    '"jjalduk"' not in _targets)
 
 
 # ═══════════════════════════════════════════════════════════════════

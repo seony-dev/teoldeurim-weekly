@@ -1,8 +1,9 @@
-# 3-target Benchmark 자동 메일링 (털어드림 / 묘한덕질 / 짤덕방)
+# Benchmark 자동 메일링 (털어드림 / 묘한덕질)
 
-K-pop Shorts 채널 **털어드림 · 묘한덕질 · 짤덕방** 세 채널의 콘텐츠 소싱을 자동화하는 공용 Benchmark 엔진.
+K-pop Shorts 채널 **털어드림 · 묘한덕질** 의 콘텐츠 소싱을 자동화하는 공용 Benchmark 엔진.
+(짤덕방 target profile 은 보존되어 있으나 2026-11-11 부터 Weekly Bundle 대상에서 제외.)
 
-- **Weekly Bundle** — 매주 금요일 08:17 KST · 3 target 각각 Benchmark 리포트를 생성해 첨부 3개를 **한 통의 메일**로 발송.
+- **Weekly Bundle** — 매주 금요일 08:17 KST · 털어드림 · 묘한덕질 2 target 각각 Benchmark 리포트를 생성해 첨부 2개를 **한 통의 메일**로 발송.
 - **털어드림 Standard** — 격주 금요일 08:23 KST (ISO 홀수 주차) · 털어드림 전용 · 별도 메일 1통 (첨부 1개).
 - **공용 엔진 · target profile 분리** — `scripts/benchmark.py` 하나가 `config/targets/{slug}.py` 를 target profile 로 로드해 identity · Reference 채널 · Hard filter · Claude prompt 를 주입받아 target 무관하게 동작.
 
@@ -16,8 +17,8 @@ K-pop Shorts 채널 **털어드림 · 묘한덕질 · 짤덕방** 세 채널의 
 
 - **cron**: `17 23 * * 4` (목 23:17 UTC = **금 08:17 KST**)
 - **파이프라인**: `send_report.py --mode=weekly-bundle`
-  1. `benchmark.py` 를 target=teoldeurim / myohanduk / jjalduk 각각 `MODE=weekly` 로 순차 실행
-  2. 3 target 모두 성공 시에만 Gmail 1회 · 첨부 3개 (실패 target 이 하나라도 있으면 발송 skip · sent history 기록 skip)
+  1. `benchmark.py` 를 target=teoldeurim / myohanduk 각각 `MODE=weekly` 로 순차 실행 (jjalduk 은 2026-11-11 부터 제외)
+  2. 모든 target 성공 시에만 Gmail 1회 · 첨부 2개 (실패 target 이 하나라도 있으면 발송 skip · sent history 기록 skip)
   3. 발송 성공 후 각 target namespace 에 sent history 자동 저장
 - **workflow_dispatch inputs**: `recipient_override` / `report_date` / `notice` / `reissue` / `force_rescan`
 
@@ -34,7 +35,7 @@ K-pop Shorts 채널 **털어드림 · 묘한덕질 · 짤덕방** 세 채널의 
 | 털어드림 | weekly | 50,000 ~ 3,000,000 | 0 ~ 7일 | 15 ~ 180초 | 7 |
 | 털어드림 | standard | 500,000 ~ 9,000,000 | 30일 초과 ~ 365일 이내 | 15 ~ 180초 | 7 |
 | 묘한덕질 | weekly | 100,000 ~ 3,000,000 | 0 ~ 7일 | 20초 이상 (상한 없음) | 6 |
-| 짤덕방 | weekly | 100,000 ~ 3,000,000 | 0 ~ 7일 | 20초 이상 (상한 없음) | 3 |
+| 짤덕방 (Weekly Bundle 제외 · profile 보존) | weekly | 100,000 ~ 3,000,000 | 0 ~ 7일 | 20초 이상 (상한 없음) | 3 |
 
 - 모든 target/mode: `MAX_ANALYSIS_CANDIDATES=30` (padding 없는 upper cap · Hard 통과가 30 미만이면 그만큼만 분석), `FINAL_CANDIDATES=5` (`direct_final ≤ 5` + `benchmark_final ≤ 5` 각각의 cap · 두 리스트 상호 배타 · 실제 노출 0~10건).
 
@@ -50,7 +51,7 @@ K-pop Shorts 채널 **털어드림 · 묘한덕질 · 짤덕방** 세 채널의 
 ### Apify Actor · 원본 title
 
 - **액터 1개만 사용**: `streamers/youtube-shorts-scraper` (discovery-only).
-  - Weekly Bundle 총 3 runs (target 당 1회) / Standard 1 run
+  - Weekly Bundle 총 2 runs (target 당 1회) / Standard 1 run
 - 이 액터가 응답에 `title` (유튜브 원본) + `translatedTitle` (번역) 을 함께 반환 (실측 검증).
 - `normalize_video()` 에서 `title_original` / `title_translated` 로 분리 저장. Claude 프롬프트 · HTML 표시는 모두 `title_original` (한국어 원본) 사용.
 - 2026-08-25~26 사이 시도했던 detail actor (`streamers/youtube-scraper`) 는 실측 결과 discovery 응답이 이미 원본을 제공하는 것이 확인되어 **완전 제거됨** (실행 시간·비용 각 50% 절감).
@@ -65,10 +66,10 @@ Common Benchmark Engine  (scripts/benchmark.py, target-agnostic)
   │
   ├─ config/targets/teoldeurim.py   identity + 7 refs + weekly/standard modes
   ├─ config/targets/myohanduk.py    identity + soft_guidance + 6 refs + weekly
-  └─ config/targets/jjalduk.py      identity + soft_guidance + 3 refs + weekly
+  └─ config/targets/jjalduk.py      identity + soft_guidance + 3 refs + weekly (Weekly Bundle 제외 · 보존)
 
 Orchestrator  (scripts/send_report.py)
-  ├─ --mode=weekly-bundle → run_weekly_bundle : 3 target × mode=weekly → 1 mail · 3 첨부
+  ├─ --mode=weekly-bundle → run_weekly_bundle : teoldeurim·myohanduk × mode=weekly → 1 mail · 2 첨부
   ├─ --mode=friday        → run_friday        : teoldeurim × mode=standard → 별도 1 mail
   └─ --mode=monday        → run_monday        : legacy (workflow 미사용)
 ```
@@ -170,7 +171,8 @@ Actions 탭 → 워크플로 선택 → **Run workflow**
   - `test_new_targets_boundary.py` — 묘한덕질 · 짤덕방 Hard filter 경계
   - `test_title_enrichment.py` — discovery-only 구조 · known fixture (`cZwgBQHn740`)
   - `test_duration_render.py` — MAX_DURATION_SEC=None HTML 렌더
-  - `test_weekly_bundle_mail.py` — 3첨부 1메일 · TEST_MODE · 부분 실패 skip
+  - `test_weekly_bundle_mail.py` — 2첨부 1메일 · TEST_MODE · 부분 실패 skip
+  - `test_weekly_bundle_targets.py` — Weekly Bundle 대상 = 털어드림·묘한덕질 (짤덕방 제외) · mode 별 실행
   - `test_orchestrator_dryrun.py` — subprocess 호출 구조 검증
 
 ---
@@ -184,7 +186,7 @@ Actions 탭 → 워크플로 선택 → **Run workflow**
 | 항목 | Apify 실행 | Apify 예상 (USD) |
 |---|---|---|
 | Weekly Bundle 1회 (이전 · pre-filter 없음) | discovery 3 runs | ~$2.45 (10/02·10/09 실측) |
-| **Weekly Bundle 1회 (현재 · 8일 pre-filter 적용)** | discovery 3 runs + `oldestPostDate` | **~$0.36 (2026-10-13 테스트 실측 기준)** |
+| **Weekly Bundle 1회 (현재 · 8일 pre-filter 적용)** | discovery 2 runs + `oldestPostDate` (2026-11-11 짤덕방 제외) | **≤ ~$0.36 (2026-10-13 3 runs 실측 기준)** |
 | Standard 1회 | discovery 1 run | ~$1.05 (2026-10-09 실측) |
 | **Apify 월간 예상 (Weekly 4회 + Standard 2회 합산 · 전체)** |  | **~$3.5** (참고: pre-filter 적용 전 전체 ~$11.8) |
 

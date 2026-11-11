@@ -166,7 +166,9 @@ chk("YML-02: weekly.yml 홀수 판정 유지 ($((10#$week % 2)) -eq 1)",
     "$((10#$week % 2)) -eq 1" in _yml)
 chk("YML-03: weekly.yml workflow_dispatch 무조건 통과 유지",
     '"${{ github.event_name }}" = "workflow_dispatch"' in _yml)
-chk("YML-04: weekly.yml cron 시각 유지 ('23 23 * * 4')", "cron: '23 23 * * 4'" in _yml)
+# (2026-11-09 cutover) 정기 실행은 Cloud Scheduler 로 이전 — GitHub schedule 은 없어야 한다
+chk("YML-04: weekly.yml schedule 트리거 없음 (정기 실행은 Cloud Scheduler)",
+    "schedule:" not in _yml and "cron:" not in _yml)
 
 
 # ═══════════════════════════════════════════════════════════════════

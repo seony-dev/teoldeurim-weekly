@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Weekly Bundle 3첨부 1메일 · 부분실패 시 skip 회귀.
+"""Weekly Bundle 2첨부 1메일 · 부분실패 시 skip 회귀.
 
 지키는 원칙:
   · Weekly Bundle 실행 성공 시 Gmail send_email 은 정확히 1회 호출.
-  · 첨부는 3개 (attachment_html 1개 + extra_attachments 2개).
-  · 3 target 중 하나라도 실패하면 raise → send_email 호출 없음.
+  · (2026-11-11) 대상은 털어드림·묘한덕질 2개 — 첨부 2개 (attachment_html 1개 + extra_attachments 1개).
+    짤덕방(jjalduk) fixture 가 있어도 실행·첨부·sent 기록 되지 않아야 함.
+  · target 중 하나라도 실패하면 raise → send_email 호출 없음.
   · sent history 는 발송 성공 후에만 각 target namespace 에 기록.
   · Standard 실행은 별도 메일 1개 (첨부 1개).
 
@@ -59,15 +60,17 @@ def _fake_record(profile, date_slug, video_ids, target_slug=None):
 send_report._record_benchmark_sent = _fake_record
 
 _run_results = {}
+_run_calls = []
 def _fake_run(date_slug, tmp_dir, target_slug):
+    _run_calls.append(target_slug)
     return _run_results.get(target_slug)
 send_report._run_target_weekly = _fake_run
 
 
 # ═══════════════════════════════════════════════════════════════════
-# CASE 1) 정상 케이스 — 3 target 모두 성공 → 1 메일 · 3 첨부 · 3 sent 기록
+# CASE 1) 정상 케이스 — 2 target 모두 성공 → 1 메일 · 2 첨부 · 2 sent 기록 (jjalduk fixture 무시)
 # ═══════════════════════════════════════════════════════════════════
-_send_calls.clear(); _record_calls.clear()
+_send_calls.clear(); _record_calls.clear(); _run_calls.clear()
 _run_results.clear()
 _run_results.update({
     "teoldeurim": {"html": "<html>te</html>", "video_ids": ["v1", "v2"], "raw_path": Path()},
@@ -85,29 +88,32 @@ chk("OK-01: Gmail send_email 정확히 1회 호출",
 call = _send_calls[0]
 chk("OK-02: attachment_html 은 첫 target(teoldeurim) HTML",
     call["attachment_html"] == "<html>te</html>")
-chk("OK-03: extra_attachments 는 2개 (myohanduk + jjalduk)",
-    len(call["extra_attachments"]) == 2)
+chk("OK-03: extra_attachments 는 1개 (myohanduk) — 총 첨부 2개",
+    len(call["extra_attachments"]) == 1)
 chk("OK-04: 두 번째 첨부 = myohanduk",
     call["extra_attachments"][0][0].startswith("myohanduk_weekly_2099-09-04"))
-chk("OK-05: 세 번째 첨부 = jjalduk",
-    call["extra_attachments"][1][0].startswith("jjalduk_weekly_2099-09-04"))
+chk("OK-05: jjalduk 첨부 없음 (파일명·본문)",
+    all("jjalduk" not in fn for fn, _ in call["extra_attachments"])
+    and "jjalduk" not in call["attachment_filename"]
+    and "짤덕방" not in call["html_body"] and "jjalduk" not in call["html_body"])
 chk("OK-06: attachment_filename = teoldeurim_weekly_2099-09-04.html",
     call["attachment_filename"] == "teoldeurim_weekly_2099-09-04.html")
-chk("OK-07: subject 에 3개 채널 카운트 포함",
-    "2건" in call["subject"] and "1건" in call["subject"] and "3건" in call["subject"],
+chk("OK-07: subject 에 2개 채널 카운트만 포함 (2건 / 1건)",
+    call["subject"].endswith("· 2건 / 1건") and "3건" not in call["subject"],
     f"subject={call['subject']!r}")
-chk("OK-08: subject 에 3개 target 이름 prefix 포함",
-    "[털어드림/묘한덕질/짤덕방 Weekly]" in call["subject"])
+chk("OK-08: subject prefix = [털어드림/묘한덕질 Weekly] (짤덕방 없음)",
+    "[털어드림/묘한덕질 Weekly]" in call["subject"] and "짤덕방" not in call["subject"])
 
-chk("OK-09: sent history 정확히 3회 기록",
-    len(_record_calls) == 3)
+chk("OK-09: sent history 정확히 2회 기록",
+    len(_record_calls) == 2)
 by_target = {r["target_slug"]: r for r in _record_calls}
 chk("OK-10: teoldeurim sent target_slug='teoldeurim'",
     "teoldeurim" in by_target and by_target["teoldeurim"]["video_ids"] == ["v1", "v2"])
 chk("OK-11: myohanduk sent target_slug='myohanduk'",
     "myohanduk" in by_target and by_target["myohanduk"]["video_ids"] == ["v3"])
-chk("OK-12: jjalduk sent target_slug='jjalduk'",
-    "jjalduk" in by_target and by_target["jjalduk"]["video_ids"] == ["v4", "v5", "v6"])
+chk("OK-12: jjalduk sent history 기록 없음 · jjalduk 실행 0회",
+    "jjalduk" not in by_target and _run_calls == ["teoldeurim", "myohanduk"],
+    f"run_calls={_run_calls}")
 chk("OK-13: 모든 기록의 profile='weekly'",
     all(r["profile"] == "weekly" for r in _record_calls))
 
@@ -217,8 +223,8 @@ chk("TEST-01: send_email 1회 호출 (실 발송 자체는 정상)",
 chk("TEST-02: subject 앞에 '[TEST] ' 접두어",
     _send_calls[0]["subject"].startswith("[TEST] "),
     f"got={_send_calls[0]['subject']!r}")
-chk("TEST-03: _record_benchmark_sent 3회 호출은 됨 (내부에서 skip)",
-    len(_saved_files) == 3)
+chk("TEST-03: _record_benchmark_sent 2회 호출은 됨 (내부에서 skip)",
+    len(_saved_files) == 2)
 chk("TEST-04: 모든 record 결과 None (TEST_MODE skip)",
     all(r is None for r in _saved_files))
 
