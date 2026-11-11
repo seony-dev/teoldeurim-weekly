@@ -3,7 +3,8 @@ name: 매주 금 Weekly Bundle (털어드림/묘한덕질)
 # (2026-08-25 신설) 2 target(털어드림/묘한덕질) × mode=weekly 통합 리포트 · Gmail 1통 · 첨부 2개.
 #   (신설 당시 3 target · 첨부 3개였으나 2026-11-11 짤덕방 제외)
 #
-# 실행 시각: 매주 금 08:17 KST = 목요일 23:17 UTC.
+# 실행 시각: 현재 정기 실행은 Cloud Scheduler 에서 매주 금 09:10 KST 에 수행 (2026-11-09~, 아래 참고).
+#   과거 GitHub Actions 정기 실행 시각: 매주 금 08:17 KST = 목요일 23:17 UTC.
 #   이전 monday_recent.yml 의 월/수/금 3회 실행은 사용자 지시로 금요일 1회로 변경.
 #   (2026-08-28) GitHub Actions schedule 지연 가능성 대비 운영 여유 확보를 위해
 #   08:42 → 08:17 로 25분 앞당김. 격주 Standard(weekly.yml) 도 08:47 → 08:23 으로 동시 이동.
